@@ -1,0 +1,39 @@
+buildscript {
+    ext.gradleVersion = '7.5.1'
+    ext.protobufPlugInVersion = '0.8.12'
+    ext.protobufVersion = '3.21.7'
+    ext.jerseyVersion = '3.1.0'
+    ext.junitVersion = '5.9.0'
+}
+
+plugins {
+    id 'java'
+    id 'com.google.protobuf' version "${protobufPlugInVersion}"
+    id 'war'
+    id 'idea'
+}
+
+repositories {
+    mavenCentral()
+}
+
+idea {
+    module {
+        generatedSourceDirs.add(file("build/generated/proto/main"))
+    }
+}
+
+group 'org.vss'
+version '1.0'
+
+
+dependencies {
+    implementation "com.google.protobuf:protobuf-java:$protobufVersion"
+
+    testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitVersion"
+}
+
+test {
+    useJUnitPlatform()
+}

@@ -1,2 +1,2 @@
-# ess-server
-Encrypted Storage Service
+# vss-server
+Versioned Storage Service

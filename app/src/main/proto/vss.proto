@@ -1,0 +1,154 @@
+syntax = "proto3";
+option java_multiple_files = true;
+package org.vss;
+
+message GetObjectRequest {
+
+  // store_id is a keyspace identifier.
+  // Ref: https://en.wikipedia.org/wiki/Keyspace_(distributed_data_store)
+  // All APIs operate within a single store_id.
+  // It is up to clients to use single or multiple stores for their use-case.
+  // This can be used for client-isolation/ rate-limiting / throttling on the server-side.
+  // Authorization and billing can also be performed at the storeId level.
+  string store_id = 1;
+
+  // Key for which the value is to be fetched.
+  //
+  // Consistency Guarantee:
+  // Get(read) operations against a key are consistent reads and will reflect all previous writes,
+  // since Put/Write provides read-after-write and read-after-update consistency guarantees.
+  //
+  // Read Isolation:
+  // Get/Read operations against a key are ensured to have read-committed isolation.
+  // Ref: https://en.wikipedia.org/wiki/Isolation_(database_systems)#Read_committed
+  string key = 2;
+}
+
+message GetObjectResponse {
+
+  // Fetched value and version along with the corresponding key in the request.
+  KeyValue value = 2;
+}
+
+message PutObjectRequest {
+
+  // store_id is a keyspace identifier.
+  // Ref: https://en.wikipedia.org/wiki/Keyspace_(distributed_data_store)
+  // All APIs operate within a single store_id.
+  // It is up to clients to use single or multiple stores for their use-case.
+  // This can be used for client-isolation/ rate-limiting / throttling on the server-side.
+  // Authorization and billing can also be performed at the store_id level.
+  string store_id = 1;
+
+  // global_version is a sequence-number/version of the whole store. This can be used for versioning
+  // and ensures that multiple updates in case of multiple devices can only be done linearly, even
+  // if those updates did not directly conflict with each other based on keys/transaction_items.
+  //
+  // If present, the write will only succeed if the current server-side global_version against
+  // the store_id is same as in the request.
+  // Clients are expected to store (client-side) the global version against store_id.
+  // The request must contain their client-side value of global_version if global versioning and
+  // conflict detection is desired.
+  //
+  // For the first write of the store, global version should be '0'. If the write succeeds, clients
+  // must increment their global version (client-side) by 1.
+  // The server increments global_version (server-side) for every successful write, hence this
+  // client-side increment is required to ensure matching versions. This updated global version
+  // should be used in subsequent PutObjectRequests for the store.
+  //
+  // Requests with a conflicting version will fail with `CONFLICT_EXCEPTION` as ErrorCode.
+  optional int64 global_version = 2;
+
+  // Items to be written as a result of this PutObjectRequest.
+  //
+  // In an item, each key is supplied with its corresponding value and version.
+  // Clients can choose to encrypt the keys client-side in order to obfuscate their usage patterns.
+  // If the write is successful, the previous value corresponding to the key will be overwritten.
+  //
+  // Multiple items in transaction_items of a single PutObjectRequest are written in
+  // a database-transaction in an all-or-nothing fashion.
+  // Items in a single PutObjectRequest must have distinct keys.
+  //
+  // Clients are expected to store a version against every key.
+  // The write will succeed if the current DB version against the key is the same as in the request.
+  // When initiating a PutObjectRequest, the request should contain their client-side version for
+  // that key-value.
+  //
+  // For the first write of any key, the version should be '0'. If the write succeeds, the client
+  // must increment their corresponding key versions (client-side) by 1.
+  // The server increments key versions (server-side) for every successful write, hence this
+  // client-side increment is required to ensure matching versions. These updated key versions should
+  // be used in subsequent PutObjectRequests for the keys.
+  //
+  // Requests with a conflicting version will fail with `CONFLICT_EXCEPTION` as ErrorCode.
+  //
+  // Considerations for transactions:
+  // Transaction writes of multiple items have a performance overhead, hence it is recommended to use
+  // them only if required by the client application to ensure logic/code correctness.
+  // That is, transaction_items are not a substitute for batch-write of multiple unrelated items.
+  // When a write of multiple unrelated items is desired, it is recommended to use separate
+  // PutObjectRequests.
+  //
+  // Consistency guarantee:
+  // All PutObjectRequests are strongly consistent i.e. they provide read-after-write and
+  // read-after-update consistency guarantees.
+  repeated KeyValue transaction_items = 3;
+}
+
+message PutObjectResponse {
+}
+
+// When HttpStatusCode is not ok (200), the response `content` contains a serialized ErrorResponse
+// with the relevant ErrorCode and message
+message ErrorResponse {
+
+  // The error code uniquely identifying an error condition.
+  // It is meant to be read and understood programmatically by code that detects/handles errors by
+  // type.
+  ErrorCode error_code = 1;
+
+  // The error message containing a generic description of the error condition in English.
+  // It is intended for a human audience only and should not be parsed to extract any information
+  // programmatically. Client-side code may use it for logging only.
+  string message = 2;
+}
+
+// ErrorCodes to be used in ErrorResponse
+enum ErrorCode {
+
+  // Default protobuf Enum value. Will not be used as ErrorCode by server.
+  UNKNOWN = 0;
+
+  // CONFLICT_EXCEPTION is used when the request contains mismatched version (either key or global)
+  // in PutObjectRequest. For more info refer PutObjectRequest.
+  CONFLICT_EXCEPTION= 1;
+
+  // INVALID_REQUEST_EXCEPTION is used in the following cases:
+  //   - The request was missing a required argument.
+  //   - The specified argument was invalid, incomplete or in the wrong format.
+  //   - The request body of api cannot be deserialized into corresponding protobuf object.
+  INVALID_REQUEST_EXCEPTION = 2;
+
+  // An internal server error occurred, client is probably at no fault and can safely retry this
+  // error with exponential backoff.
+  INTERNAL_SERVER_EXCEPTION = 3;
+}
+
+message KeyValue {
+
+  // Key against which the value is stored.
+  string key = 1;
+
+  // Version field is used for key-level versioning.
+  // For first write of key, version should be '0'. If the write succeeds, clients must increment
+  // their corresponding key version (client-side) by 1.
+  // The server increments key version (server-side) for every successful write, hence this
+  // client-side increment is required to ensure matching versions. These updated key versions should
+  // be used in subsequent PutObjectRequests for the keys.
+  int64 version = 2;
+
+  // Object value in bytes which is stored (in put) and fetched (in get).
+  // Clients must encrypt this blob client-side before sending it over the wire to server in order
+  // to preserve privacy and security.
+  bytes value = 3;
+}
