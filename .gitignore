@@ -1,0 +1,16 @@
+.protoc-version
+.idea/*
+*.ipr
+*.iws
+.settings/*
+.project
+.gradle/*
+gradle/*
+gradlew*
+build/*
+app/build/*
+app/bin/*
+app/.classpath
+app/.project
+app/.settings
+
