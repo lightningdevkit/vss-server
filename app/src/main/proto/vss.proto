@@ -9,7 +9,7 @@ message GetObjectRequest {
   // All APIs operate within a single store_id.
   // It is up to clients to use single or multiple stores for their use-case.
   // This can be used for client-isolation/ rate-limiting / throttling on the server-side.
-  // Authorization and billing can also be performed at the storeId level.
+  // Authorization and billing can also be performed at the store_id level.
   string store_id = 1;
 
   // Key for which the value is to be fetched.
@@ -96,6 +96,64 @@ message PutObjectRequest {
 }
 
 message PutObjectResponse {
+}
+
+message GetKeysSummaryRequest {
+
+  // store_id is a keyspace identifier.
+  // Ref: https://en.wikipedia.org/wiki/Keyspace_(distributed_data_store)
+  // All APIs operate within a single store_id.
+  // It is up to clients to use single or multiple stores for their use-case.
+  // This can be used for client-isolation/ rate-limiting / throttling on the server-side.
+  // Authorization and billing can also be performed at the store_id level.
+  string store_id = 1;
+
+  // A key_prefix is a string of characters at the beginning of the key. Prefixes can be used as
+  // a way to organize key-values in a similar way to directories.
+  //
+  // If key_prefix is specified, the response results will be limited to those keys that begin with
+  // the specified prefix.
+  //
+  // If no key_prefix is specified or it is empty, all the keys are eligible to be returned in the
+  // response.
+  optional string key_prefix = 2;
+
+  // last_evaluated_key is a pagination token.
+  //
+  // To query for the first page of GetKeysSummary, last_evaluated_key must not be specified.
+  //
+  // For subsequent pages, use the value that was returned as `last_evaluated_key` in the previous
+  // page's GetKeysSummaryResponse.
+  // It will be used as exclusive_start_key to perform the new query and only keys greater than
+  // the specified last_evaluated_key will be returned in the response.
+  optional string last_evaluated_key = 3;
+}
+
+message GetKeysSummaryResponse {
+
+  // Fetched versions along with the corresponding keys in the request.
+  repeated KeyValue key_versions = 1;
+
+  // last_evaluated_key is a pagination token, it is the key of the item where the operation stopped,
+  // inclusive of the current result set.
+  // Use this value to start a new GetKeysSummary operation, excluding this value in the new result
+  // by specifying this last_evaluated_key in the next request.
+  //
+  // If last_evaluated_key is empty, then the "last page" of results has been processed and there is
+  // no more data to be retrieved.
+  //
+  // If last_evaluated_key is not empty, it does not necessarily mean that there is more data in the
+  // result set. The only way to know when you have reached the end of the result set is when
+  // last_evaluated_key is empty.
+  //
+  // Caution: Clients must not assume a specific number of key_versions to be present in a page for
+  // paginated response.
+  optional string last_evaluated_key = 2;
+
+  // global_version is a sequence-number/version of the whole store.
+  //
+  // global_version is only returned in response for the first page of GetKeysSummaryResponse.
+  optional int64 global_version = 3;
 }
 
 // When HttpStatusCode is not ok (200), the response `content` contains a serialized ErrorResponse
