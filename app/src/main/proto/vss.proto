@@ -98,7 +98,7 @@ message PutObjectRequest {
 message PutObjectResponse {
 }
 
-message GetKeysSummaryRequest {
+message ListKeyVersionsRequest {
 
   // store_id is a keyspace identifier.
   // Ref: https://en.wikipedia.org/wiki/Keyspace_(distributed_data_store)
@@ -114,45 +114,60 @@ message GetKeysSummaryRequest {
   // If key_prefix is specified, the response results will be limited to those keys that begin with
   // the specified prefix.
   //
-  // If no key_prefix is specified or it is empty, all the keys are eligible to be returned in the
-  // response.
+  // If no key_prefix is specified or it is empty (""), all the keys are eligible to be returned in
+  // the response.
   optional string key_prefix = 2;
 
-  // last_evaluated_key is a pagination token.
+  // page_size is used by clients to specify the maximum number of results that can be returned by
+  // the server.
+  // The server may further constrain the maximum number of results returned in a single page.
+  // If the page_size is 0 or not set, the server will decide the number of results to be returned.
+  optional int32 page_size = 3;
+
+  // page_token is a pagination token.
   //
-  // To query for the first page of GetKeysSummary, last_evaluated_key must not be specified.
+  // To query for the first page of ListKeyVersions, page_token must not be specified.
   //
-  // For subsequent pages, use the value that was returned as `last_evaluated_key` in the previous
-  // page's GetKeysSummaryResponse.
-  // It will be used as exclusive_start_key to perform the new query and only keys greater than
-  // the specified last_evaluated_key will be returned in the response.
-  optional string last_evaluated_key = 3;
+  // For subsequent pages, use the value that was returned as `next_page_token` in the previous
+  // page's ListKeyVersionsResponse.
+  optional string page_token = 4;
 }
 
-message GetKeysSummaryResponse {
+message ListKeyVersionsResponse {
 
-  // Fetched versions along with the corresponding keys in the request.
+  // Fetched keys and versions.
+  // Even though this API reuses KeyValue struct, the value sub-field will not be set by the server.
   repeated KeyValue key_versions = 1;
 
-  // last_evaluated_key is a pagination token, it is the key of the item where the operation stopped,
-  // inclusive of the current result set.
-  // Use this value to start a new GetKeysSummary operation, excluding this value in the new result
-  // by specifying this last_evaluated_key in the next request.
+  // next_page_token is a pagination token, used to retrieve the next page of results.
+  // Use this value to query for next_page of paginated ListKeyVersions operation, by specifying
+  // this value as the `page_token` in the next request.
   //
-  // If last_evaluated_key is empty, then the "last page" of results has been processed and there is
-  // no more data to be retrieved.
+  // If next_page_token is empty (""), then the "last page" of results has been processed and
+  // there is no more data to be retrieved.
   //
-  // If last_evaluated_key is not empty, it does not necessarily mean that there is more data in the
+  // If next_page_token is not empty, it does not necessarily mean that there is more data in the
   // result set. The only way to know when you have reached the end of the result set is when
-  // last_evaluated_key is empty.
+  // next_page_token is empty.
   //
   // Caution: Clients must not assume a specific number of key_versions to be present in a page for
   // paginated response.
-  optional string last_evaluated_key = 2;
+  optional string next_page_token = 2;
 
   // global_version is a sequence-number/version of the whole store.
   //
-  // global_version is only returned in response for the first page of GetKeysSummaryResponse.
+  // global_version is only returned in response for the first page of the ListKeyVersionsResponse
+  // and is guaranteed to be read before reading any key-versions.
+  //
+  // In case of refreshing complete key-version view on the client-side, correct usage for
+  // the returned global_version is as following:
+  //   1. Read global_version from the first page of paginated response, store it as local_variable.
+  //   2. Update all the key_versions on client-side from the paginated response.
+  //   3. Update global_version on client_side from the local_variable stored in step-1.
+  // This ensures that on client-side, we can guarantee that all current key_versions are at least
+  // from the corresponding global_version. This guarantee is helpful for ensuring the versioning
+  // correctness if using the global_version in PutObject API and can help avoid the race conditions
+  // related to it.
   optional int64 global_version = 3;
 }
 
