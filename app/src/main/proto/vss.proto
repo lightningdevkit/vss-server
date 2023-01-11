@@ -162,7 +162,7 @@ message ListKeyVersionsResponse {
   // In case of refreshing complete key-version view on the client-side, correct usage for
   // the returned global_version is as following:
   //   1. Read global_version from the first page of paginated response, store it as local_variable.
-  //   2. Update all the key_versions on client-side from the paginated response.
+  //   2. Update all the key_versions on client-side from all the pages of paginated response.
   //   3. Update global_version on client_side from the local_variable stored in step-1.
   // This ensures that on client-side, we can guarantee that all current key_versions are at least
   // from the corresponding global_version. This guarantee is helpful for ensuring the versioning
