@@ -123,7 +123,8 @@ public class PostgresBackendImpl implements KVStore {
         .setVersion(kv.getVersion());
   }
 
-  @Override public ListKeyVersionsResponse listKeyVersions(ListKeyVersionsRequest request) {
+  @Override
+  public ListKeyVersionsResponse listKeyVersions(ListKeyVersionsRequest request) {
     throw new UnsupportedOperationException("Operation not implemented");
   }
 }
