@@ -4,3 +4,4 @@ CREATE TABLE vss_db (
     value bytea  NULL,
     version bigint  NOT NULL
 );
+

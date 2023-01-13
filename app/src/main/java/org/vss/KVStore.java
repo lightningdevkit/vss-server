@@ -10,3 +10,4 @@ public interface KVStore {
 
   ListKeyVersionsResponse listKeyVersions(ListKeyVersionsRequest request);
 }
+
