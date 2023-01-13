@@ -34,7 +34,8 @@ public class PostgresBackendImpl implements KVStore {
     this.context = context;
   }
 
-  @Override public GetObjectResponse get(GetObjectRequest request) {
+  @Override
+  public GetObjectResponse get(GetObjectRequest request) {
 
     VssDbRecord vssDbRecord = context.selectFrom(VSS_DB)
         .where(VSS_DB.STORE_ID.eq(request.getStoreId())
@@ -57,7 +58,8 @@ public class PostgresBackendImpl implements KVStore {
     }
   }
 
-  @Override public PutObjectResponse put(PutObjectRequest request) {
+  @Override
+  public PutObjectResponse put(PutObjectRequest request) {
 
     String storeId = request.getStoreId();
 
@@ -125,3 +127,4 @@ public class PostgresBackendImpl implements KVStore {
     throw new UnsupportedOperationException("Operation not implemented");
   }
 }
+
