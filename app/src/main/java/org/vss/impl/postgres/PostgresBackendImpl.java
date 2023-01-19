@@ -42,20 +42,22 @@ public class PostgresBackendImpl implements KVStore {
             .and(VSS_DB.KEY.eq(request.getKey())))
         .fetchOne();
 
+    final KeyValue keyValue;
+
     if (vssDbRecord != null) {
-      return GetObjectResponse.newBuilder()
-          .setValue(KeyValue.newBuilder()
-              .setKey(vssDbRecord.getKey())
-              .setValue(ByteString.copyFrom(vssDbRecord.getValue()))
-              .setVersion(vssDbRecord.getVersion())
-              .build())
+      keyValue = KeyValue.newBuilder()
+          .setKey(vssDbRecord.getKey())
+          .setValue(ByteString.copyFrom(vssDbRecord.getValue()))
+          .setVersion(vssDbRecord.getVersion())
           .build();
     } else {
-      return GetObjectResponse.newBuilder()
-          .setValue(KeyValue.newBuilder()
-              .setKey(request.getKey()).build())
-          .build();
+      keyValue = KeyValue.newBuilder()
+          .setKey(request.getKey()).build();
     }
+
+    return GetObjectResponse.newBuilder()
+        .setValue(keyValue)
+        .build();
   }
 
   @Override
@@ -66,13 +68,15 @@ public class PostgresBackendImpl implements KVStore {
     List<VssDbRecord> vssRecords = new ArrayList<>(request.getTransactionItemsList().stream()
         .map(kv -> buildVssRecord(storeId, kv)).toList());
 
-    VssDbRecord globalVersionRecord = buildVssRecord(storeId,
-        KeyValue.newBuilder()
-            .setKey(GLOBAL_VERSION_KEY)
-            .setVersion(request.getGlobalVersion())
-            .build());
+    if (request.hasGlobalVersion()) {
+      VssDbRecord globalVersionRecord = buildVssRecord(storeId,
+          KeyValue.newBuilder()
+              .setKey(GLOBAL_VERSION_KEY)
+              .setVersion(request.getGlobalVersion())
+              .build());
 
-    vssRecords.add(globalVersionRecord);
+      vssRecords.add(globalVersionRecord);
+    }
 
     context.transaction((ctx) -> {
       DSLContext dsl = ctx.dsl();
@@ -99,11 +103,9 @@ public class PostgresBackendImpl implements KVStore {
 
   private Insert<VssDbRecord> buildInsertRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
     return dsl.insertInto(VSS_DB)
-        .select(dsl.select(val(vssRecord.getStoreId()), val(vssRecord.getKey()),
-                val(vssRecord.getValue()), val(1))
-            .whereNotExists(dsl.selectOne().from(VSS_DB)
-                .where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
-                    .and(VSS_DB.KEY.eq(vssRecord.getKey())))));
+        .values(vssRecord.getStoreId(), vssRecord.getKey(),
+            vssRecord.getValue(), 1)
+        .onDuplicateKeyIgnore();
   }
 
   private Update<VssDbRecord> buildUpdateRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
