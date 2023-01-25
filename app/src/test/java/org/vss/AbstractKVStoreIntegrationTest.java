@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public abstract class AbstractKVStoreIntegrationTest {
+
   private final String STORE_ID = "storeId";
 
   protected KVStore kvStore;
@@ -24,7 +25,6 @@ public abstract class AbstractKVStoreIntegrationTest {
     assertDoesNotThrow(() -> putObjects(1L, List.of(kv("k1", "k1v2", 1))));
 
     KeyValue response = getObject("k1");
-    assertThat(response, is(kv("k1", "k1v2", 2)));
     assertThat(response.getKey(), is("k1"));
     assertThat(response.getVersion(), is(2L));
     assertThat(response.getValue().toStringUtf8(), is("k1v2"));
