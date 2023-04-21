@@ -1,39 +1,101 @@
 buildscript {
-    ext.gradleVersion = '7.5.1'
-    ext.protobufPlugInVersion = '0.8.12'
-    ext.protobufVersion = '3.21.7'
-    ext.jerseyVersion = '3.1.0'
-    ext.junitVersion = '5.9.0'
+  ext.gradleVersion = '7.5.1'
+  ext.protobufPlugInVersion = '0.8.12'
+  ext.protobufVersion = '3.21.7'
+  ext.jerseyVersion = '3.1.0'
+  ext.junitVersion = '5.9.0'
+  ext.postgresVersion = '42.5.1'
+  ext.jooqVersion = '3.17.7'
+  ext.guiceVersion = '5.1.0'
 }
 
 plugins {
-    id 'java'
-    id 'com.google.protobuf' version "${protobufPlugInVersion}"
-    id 'war'
-    id 'idea'
+  id 'java'
+  id 'com.google.protobuf' version "${protobufPlugInVersion}"
+  id 'war'
+  id 'idea'
+  id 'nu.studer.jooq' version '8.0'
 }
 
 repositories {
-    mavenCentral()
+  mavenCentral()
 }
 
 idea {
-    module {
-        generatedSourceDirs.add(file("build/generated/proto/main"))
-    }
+  module {
+    generatedSourceDirs.add(file("build/generated/proto/main"))
+  }
 }
 
 group 'org.vss'
 version '1.0'
 
-
 dependencies {
-    implementation "com.google.protobuf:protobuf-java:$protobufVersion"
+  implementation "com.google.protobuf:protobuf-java:$protobufVersion"
 
-    testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitVersion"
+  //jOOQ & Postgres impl deps
+  implementation "org.jooq:jooq:$jooqVersion"
+  implementation "org.jooq:jooq-meta:$jooqVersion"
+  implementation "org.jooq:jooq-codegen:$jooqVersion"
+  runtimeOnly "org.postgresql:postgresql:$postgresVersion"
+  jooqGenerator "org.postgresql:postgresql:$postgresVersion"
+
+  implementation "com.google.inject:guice:$guiceVersion"
+
+  testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"
+  testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitVersion"
+  testImplementation "org.hamcrest:hamcrest-library:2.2"
+  testImplementation "org.testcontainers:junit-jupiter:1.17.6"
+  testImplementation "org.testcontainers:postgresql:1.17.6"
 }
 
 test {
-    useJUnitPlatform()
+  useJUnitPlatform()
+}
+
+protobuf {
+  protoc {
+    artifact = "com.google.protobuf:protoc:$protobufVersion"
+  }
+}
+
+jooq {
+  configurations {
+    main {
+      generateSchemaSourceOnCompilation = true
+
+      generationTool {
+        jdbc {
+          driver = 'org.postgresql.Driver'
+          url = 'jdbc:postgresql://localhost:5432/postgres'
+          user = 'postgres'
+          password = ''
+          properties {
+            property {
+              key = 'ssl'
+              value = 'false'
+            }
+          }
+        }
+        generator {
+          name = 'org.jooq.codegen.DefaultGenerator'
+          database {
+            name = 'org.jooq.meta.postgres.PostgresDatabase'
+            inputSchema = 'public'
+          }
+          generate {
+            deprecated = false
+            records = true
+            immutablePojos = true
+            fluentSetters = true
+          }
+          target {
+            packageName = 'org.vss.postgres'
+            directory = 'build/generated-src/jooq/main'
+          }
+          strategy.name = 'org.jooq.codegen.DefaultGeneratorStrategy'
+        }
+      }
+    }
+  }
 }
