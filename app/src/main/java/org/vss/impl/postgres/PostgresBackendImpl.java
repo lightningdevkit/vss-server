@@ -5,6 +5,7 @@ import com.google.protobuf.ByteString;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.inject.Singleton;
 import org.jooq.DSLContext;
 import org.jooq.Insert;
@@ -21,12 +22,12 @@ import org.vss.PutObjectResponse;
 import org.vss.exception.ConflictException;
 import org.vss.postgres.tables.records.VssDbRecord;
 
-import static org.jooq.impl.DSL.val;
 import static org.vss.postgres.tables.VssDb.VSS_DB;
 
 @Singleton
 public class PostgresBackendImpl implements KVStore {
 
+  private static final int LIST_KEY_VERSIONS_MAX_PAGE_SIZE = 100;
   private final DSLContext context;
 
   @Inject
@@ -127,6 +128,54 @@ public class PostgresBackendImpl implements KVStore {
 
   @Override
   public ListKeyVersionsResponse listKeyVersions(ListKeyVersionsRequest request) {
-    throw new UnsupportedOperationException("Operation not implemented");
+    String storeId = request.getStoreId();
+    String keyPrefix = request.getKeyPrefix();
+    String pageToken = request.getPageToken();
+    int pageSize = request.hasPageSize() ? request.getPageSize() : Integer.MAX_VALUE;
+
+    // Only fetch global_version for first page.
+    // Fetch global_version before fetching any key_versions to ensure that,
+    // all current key_versions were stored at global_version or later.
+    Long globalVersion = null;
+    if (!request.hasPageToken()) {
+      GetObjectRequest getGlobalVersionRequest = GetObjectRequest.newBuilder()
+          .setStoreId(storeId)
+          .setKey(GLOBAL_VERSION_KEY)
+          .build();
+      globalVersion = get(getGlobalVersionRequest).getValue().getVersion();
+    }
+
+    List<VssDbRecord> vssDbRecords = context.select(VSS_DB.KEY, VSS_DB.VERSION).from(VSS_DB)
+        .where(VSS_DB.STORE_ID.eq(storeId)
+            .and(VSS_DB.KEY.startsWith(keyPrefix)))
+        .orderBy(VSS_DB.KEY)
+        .seek(pageToken)
+        .limit(Math.min(pageSize, LIST_KEY_VERSIONS_MAX_PAGE_SIZE))
+        .stream()
+        .map(record -> record.into(VssDbRecord.class))
+        .toList();
+
+    List<KeyValue> keyVersions = vssDbRecords.stream()
+        .filter(kv -> !GLOBAL_VERSION_KEY.equals(kv.getKey()))
+        .map(kv -> KeyValue.newBuilder()
+            .setKey(kv.getKey())
+            .setVersion(kv.getVersion())
+            .build())
+        .toList();
+
+    String nextPageToken = "";
+    if (!keyVersions.isEmpty()) {
+      nextPageToken = keyVersions.get(keyVersions.size() - 1).getKey();
+    }
+
+    ListKeyVersionsResponse.Builder responseBuilder = ListKeyVersionsResponse.newBuilder()
+        .addAllKeyVersions(keyVersions)
+        .setNextPageToken(nextPageToken);
+
+    if (Objects.nonNull(globalVersion)) {
+      responseBuilder.setGlobalVersion(globalVersion);
+    }
+
+    return responseBuilder.build();
   }
 }
