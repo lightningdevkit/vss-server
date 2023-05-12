@@ -35,6 +35,7 @@ dependencies {
   implementation "com.google.protobuf:protobuf-java:$protobufVersion"
 
   implementation('org.glassfish.jersey.containers:jersey-container-servlet:3.1.0')
+  implementation('org.glassfish.jersey.inject:jersey-hk2:3.1.0')
 
   //jOOQ & Postgres impl deps
   implementation "org.jooq:jooq:$jooqVersion"
@@ -44,6 +45,10 @@ dependencies {
   jooqGenerator "org.postgresql:postgresql:$postgresVersion"
 
   implementation "com.google.inject:guice:$guiceVersion"
+  implementation "org.glassfish.hk2:guice-bridge:3.0.3"
+
+  compileOnly 'org.projectlombok:lombok:1.18.24'
+  annotationProcessor 'org.projectlombok:lombok:1.18.24'
 
   compileOnly 'org.projectlombok:lombok:1.18.24'
   annotationProcessor 'org.projectlombok:lombok:1.18.24'
