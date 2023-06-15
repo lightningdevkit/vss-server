@@ -10,7 +10,9 @@ To address this challenge, the VSS project introduces a framework and a readily 
 * **Recovery**: In the event of a user losing their phone or access to their app's data, VSS allows for the restoration of the wallet state. This ensures that users can regain access to their funds, even in cases of device or data loss.
 * **Multi-device Access**: VSS enables multiple devices with the same wallet app to securely access and share LN state. This seamless switching between devices ensures consistent access to funds for users.
 
-![VSS High Level Data Flow](http://www.plantuml.com/plantuml/png/VOwnJiGm44HxVyMKK9pehpW9SK8K1mK6-iKt92iSRx0tGVbxBD60X6YssQTvpzKpyH8ZxdGOSUBAZAEuu3RRPmZtzggPHwwQk3kWWtjSBpwok2PnjO97VYni7lflT_Z9xz5iueLq_CdUMIv3o6OptgoYU-g6MRQ9nT7wkQfCr9NdFvtFyrcSE3tWPfHIc15TdD_Iw5PbO2zpcpJz1wCF_cwCIqfiBNm1)
+<p align="center">
+  <img src="http://www.plantuml.com/plantuml/png/VP2nJWCn44HxVyMKK4JqAQ8W8aGHA33GBxuXP-7p7lRUeVmzAz60X6YcsQTvezrtasRBL89bAyHBZBZBfn57hYmuY0bkYtw6SA-lkV30DITkTd1mY-l5HbRBIInhnIC_5dOBVjliVl9RT9ru8Ou_wJlhPGX5TSQRDhYddJ7BUV8cT8-hniIySlZJ-JmFOiJn0JUZrCg2Q6BybaRJ9YVwCjCff_zWUE7lZN59YRq7rY7iFVmhNm00" />
+</p>
 
 Clients can also use VSS for general metadata storage as well such as payment history, user metadata etc.
 ### Motivation
