@@ -4,6 +4,7 @@ buildscript {
   ext.protobufVersion = '3.21.7'
   ext.jerseyVersion = '3.1.0'
   ext.junitVersion = '5.9.0'
+  ext.mockitoVersion = '5.2.0'
   ext.postgresVersion = '42.5.1'
   ext.jooqVersion = '3.17.7'
   ext.guiceVersion = '5.1.0'
@@ -33,6 +34,8 @@ version '1.0'
 dependencies {
   implementation "com.google.protobuf:protobuf-java:$protobufVersion"
 
+  implementation('org.glassfish.jersey.containers:jersey-container-servlet:3.1.0')
+
   //jOOQ & Postgres impl deps
   implementation "org.jooq:jooq:$jooqVersion"
   implementation "org.jooq:jooq-meta:$jooqVersion"
@@ -42,7 +45,12 @@ dependencies {
 
   implementation "com.google.inject:guice:$guiceVersion"
 
+  compileOnly 'org.projectlombok:lombok:1.18.24'
+  annotationProcessor 'org.projectlombok:lombok:1.18.24'
+
   testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"
+  testImplementation "org.junit.jupiter:junit-jupiter-params:$junitVersion"
+  testImplementation "org.mockito:mockito-core:$mockitoVersion"
   testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitVersion"
   testImplementation "org.hamcrest:hamcrest-library:2.2"
   testImplementation "org.testcontainers:junit-jupiter:1.17.6"
