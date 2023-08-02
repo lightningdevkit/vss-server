@@ -11,6 +11,8 @@ import org.jooq.DSLContext;
 import org.jooq.Insert;
 import org.jooq.Query;
 import org.jooq.Update;
+import org.vss.DeleteObjectRequest;
+import org.vss.DeleteObjectResponse;
 import org.vss.GetObjectRequest;
 import org.vss.GetObjectResponse;
 import org.vss.KVStore;
@@ -138,6 +140,20 @@ public class PostgresBackendImpl implements KVStore {
         .setKey(kv.getKey())
         .setValue(kv.getValue().toByteArray())
         .setVersion(kv.getVersion());
+  }
+
+  @Override
+  public DeleteObjectResponse delete(DeleteObjectRequest request) {
+    String storeId = request.getStoreId();
+    VssDbRecord vssDbRecord = buildVssRecord(storeId, request.getKeyValue());
+
+    context.transaction((ctx) -> {
+      DSLContext dsl = ctx.dsl();
+      Query deleteObjectQuery = buildDeleteObjectQuery(dsl, vssDbRecord);
+      dsl.execute(deleteObjectQuery);
+    });
+
+    return DeleteObjectResponse.newBuilder().build();
   }
 
   @Override

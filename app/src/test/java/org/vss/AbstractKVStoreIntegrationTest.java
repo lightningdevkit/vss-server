@@ -166,6 +166,32 @@ public abstract class AbstractKVStoreIntegrationTest {
   }
 
   @Test
+  void deleteShouldSucceedWhenItemExists() {
+    assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
+    assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
+
+    KeyValue response = getObject("k1");
+    assertThat(response.getKey(), is("k1"));
+    assertTrue(response.getValue().isEmpty());
+  }
+
+  @Test
+  void deleteShouldSucceedWhenItemDoesNotExist() {
+    assertDoesNotThrow(() -> deleteObject(kv("non_existent_key", "", 0)));
+  }
+
+  @Test
+  void deleteShouldBeIdempotent() {
+    assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
+    assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
+    assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
+
+    KeyValue response = getObject("k1");
+    assertThat(response.getKey(), is("k1"));
+    assertTrue(response.getValue().isEmpty());
+  }
+
+  @Test
   void getShouldReturnEmptyResponseWhenKeyDoesNotExist() {
     KeyValue response = getObject("non_existent_key");
 
@@ -415,6 +441,12 @@ public abstract class AbstractKVStoreIntegrationTest {
     }
 
     this.kvStore.put(putObjectRequestBuilder.build());
+  }
+
+  private void deleteObject(KeyValue keyValue) {
+    DeleteObjectRequest request = DeleteObjectRequest.newBuilder()
+        .setStoreId(STORE_ID).setKeyValue(keyValue).build();
+    this.kvStore.delete(request);
   }
 
   private ListKeyVersionsResponse list(@Nullable String nextPageToken, @Nullable Integer pageSize,
