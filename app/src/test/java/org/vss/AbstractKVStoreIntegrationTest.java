@@ -132,6 +132,66 @@ public abstract class AbstractKVStoreIntegrationTest {
   }
 
   @Test
+  void putAndDeleteShouldSucceedAsAtomicTransaction() {
+    assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
+    // Put and Delete succeeds
+    assertDoesNotThrow(() -> putAndDeleteObjects(null, List.of(kv("k2", "k2v1", 0)), List.of(kv("k1", "", 1))));
+
+    KeyValue response = getObject("k2");
+    assertThat(response.getKey(), is("k2"));
+    assertThat(response.getVersion(), is(1L));
+    assertThat(response.getValue().toStringUtf8(), is("k2v1"));
+
+    assertTrue(getObject("k1").getValue().isEmpty());
+
+    // Delete fails (and hence put as well) due to mismatched version for the deleted item.
+    assertThrows(ConflictException.class, () -> putAndDeleteObjects(null, List.of(kv("k3", "k3v1", 0)), List.of(kv("k2", "", 3))));
+
+    assertTrue(getObject("k3").getValue().isEmpty());
+    assertFalse(getObject("k2").getValue().isEmpty());
+
+    // Put fails (and hence delete as well) due to mismatched version for the put item.
+    assertThrows(ConflictException.class, () -> putAndDeleteObjects(null, List.of(kv("k3", "k3v1", 1)), List.of(kv("k2", "", 1))));
+
+    assertTrue(getObject("k3").getValue().isEmpty());
+    assertFalse(getObject("k2").getValue().isEmpty());
+
+    // Put and delete both fail due to mismatched global version.
+    assertThrows(ConflictException.class, () -> putAndDeleteObjects(2L, List.of(kv("k3", "k3v1", 0)), List.of(kv("k2", "", 1))));
+
+    assertTrue(getObject("k3").getValue().isEmpty());
+    assertFalse(getObject("k2").getValue().isEmpty());
+
+    assertThat(getObject(KVStore.GLOBAL_VERSION_KEY).getVersion(), is(0L));
+  }
+
+  @Test
+  void deleteShouldSucceedWhenItemExists() {
+    assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
+    assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
+
+    KeyValue response = getObject("k1");
+    assertThat(response.getKey(), is("k1"));
+    assertTrue(response.getValue().isEmpty());
+  }
+
+  @Test
+  void deleteShouldSucceedWhenItemDoesNotExist() {
+    assertDoesNotThrow(() -> deleteObject(kv("non_existent_key", "", 0)));
+  }
+
+  @Test
+  void deleteShouldBeIdempotent() {
+    assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
+    assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
+    assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
+
+    KeyValue response = getObject("k1");
+    assertThat(response.getKey(), is("k1"));
+    assertTrue(response.getValue().isEmpty());
+  }
+
+  @Test
   void getShouldReturnEmptyResponseWhenKeyDoesNotExist() {
     KeyValue response = getObject("non_existent_key");
 
@@ -368,6 +428,25 @@ public abstract class AbstractKVStoreIntegrationTest {
     }
 
     this.kvStore.put(putObjectRequestBuilder.build());
+  }
+
+  private void putAndDeleteObjects(@Nullable Long globalVersion, List<KeyValue> putKeyValues, List<KeyValue> deleteKeyValues) {
+    PutObjectRequest.Builder putObjectRequestBuilder = PutObjectRequest.newBuilder()
+        .setStoreId(STORE_ID)
+        .addAllTransactionItems(putKeyValues)
+        .addAllDeleteItems(deleteKeyValues);
+
+    if (Objects.nonNull(globalVersion)) {
+      putObjectRequestBuilder.setGlobalVersion(globalVersion);
+    }
+
+    this.kvStore.put(putObjectRequestBuilder.build());
+  }
+
+  private void deleteObject(KeyValue keyValue) {
+    DeleteObjectRequest request = DeleteObjectRequest.newBuilder()
+        .setStoreId(STORE_ID).setKeyValue(keyValue).build();
+    this.kvStore.delete(request);
   }
 
   private ListKeyVersionsResponse list(@Nullable String nextPageToken, @Nullable Integer pageSize,

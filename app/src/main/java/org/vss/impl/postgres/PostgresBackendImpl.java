@@ -11,6 +11,8 @@ import org.jooq.DSLContext;
 import org.jooq.Insert;
 import org.jooq.Query;
 import org.jooq.Update;
+import org.vss.DeleteObjectRequest;
+import org.vss.DeleteObjectResponse;
 import org.vss.GetObjectRequest;
 import org.vss.GetObjectResponse;
 import org.vss.KVStore;
@@ -66,7 +68,10 @@ public class PostgresBackendImpl implements KVStore {
 
     String storeId = request.getStoreId();
 
-    List<VssDbRecord> vssRecords = new ArrayList<>(request.getTransactionItemsList().stream()
+    List<VssDbRecord> vssPutRecords = new ArrayList<>(request.getTransactionItemsList().stream()
+        .map(kv -> buildVssRecord(storeId, kv)).toList());
+
+    List<VssDbRecord> vssDeleteRecords = new ArrayList<>(request.getDeleteItemsList().stream()
         .map(kv -> buildVssRecord(storeId, kv)).toList());
 
     if (request.hasGlobalVersion()) {
@@ -74,15 +79,20 @@ public class PostgresBackendImpl implements KVStore {
           KeyValue.newBuilder()
               .setKey(GLOBAL_VERSION_KEY)
               .setVersion(request.getGlobalVersion())
+              .setValue(ByteString.EMPTY)
               .build());
 
-      vssRecords.add(globalVersionRecord);
+      vssPutRecords.add(globalVersionRecord);
     }
 
     context.transaction((ctx) -> {
       DSLContext dsl = ctx.dsl();
-      List<Query> batchQueries = vssRecords.stream()
-          .map(vssRecord -> buildPutObjectQuery(dsl, vssRecord)).toList();
+      List<Query> batchQueries = new ArrayList<>();
+
+      batchQueries.addAll(vssPutRecords.stream()
+          .map(vssRecord -> buildPutObjectQuery(dsl, vssRecord)).toList());
+      batchQueries.addAll(vssDeleteRecords.stream()
+          .map(vssRecord -> buildDeleteObjectQuery(dsl, vssRecord)).toList());
 
       int[] batchResult = dsl.batch(batchQueries).execute();
 
@@ -95,6 +105,12 @@ public class PostgresBackendImpl implements KVStore {
     });
 
     return PutObjectResponse.newBuilder().build();
+  }
+
+  private Query buildDeleteObjectQuery(DSLContext dsl, VssDbRecord vssRecord) {
+    return dsl.deleteFrom(VSS_DB).where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
+        .and(VSS_DB.KEY.eq(vssRecord.getKey()))
+        .and(VSS_DB.VERSION.eq(vssRecord.getVersion())));
   }
 
   private Query buildPutObjectQuery(DSLContext dsl, VssDbRecord vssRecord) {
@@ -124,6 +140,20 @@ public class PostgresBackendImpl implements KVStore {
         .setKey(kv.getKey())
         .setValue(kv.getValue().toByteArray())
         .setVersion(kv.getVersion());
+  }
+
+  @Override
+  public DeleteObjectResponse delete(DeleteObjectRequest request) {
+    String storeId = request.getStoreId();
+    VssDbRecord vssDbRecord = buildVssRecord(storeId, request.getKeyValue());
+
+    context.transaction((ctx) -> {
+      DSLContext dsl = ctx.dsl();
+      Query deleteObjectQuery = buildDeleteObjectQuery(dsl, vssDbRecord);
+      dsl.execute(deleteObjectQuery);
+    });
+
+    return DeleteObjectResponse.newBuilder().build();
   }
 
   @Override

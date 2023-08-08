@@ -8,5 +8,7 @@ public interface KVStore {
 
   PutObjectResponse put(PutObjectRequest request);
 
+  DeleteObjectResponse delete(DeleteObjectRequest request);
+
   ListKeyVersionsResponse listKeyVersions(ListKeyVersionsRequest request);
 }

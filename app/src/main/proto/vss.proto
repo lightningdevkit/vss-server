@@ -1,7 +1,9 @@
 syntax = "proto3";
+package vss;
 option java_multiple_files = true;
-package org.vss;
+option java_package = "org.vss";
 
+// Request payload to be used for `GetObject` API call to server.
 message GetObjectRequest {
 
   // store_id is a keyspace identifier.
@@ -24,12 +26,14 @@ message GetObjectRequest {
   string key = 2;
 }
 
+// Server response for `GetObject` API.
 message GetObjectResponse {
 
   // Fetched value and version along with the corresponding key in the request.
   KeyValue value = 2;
 }
 
+// Request payload to be used for `PutObject` API call to server.
 message PutObjectRequest {
 
   // store_id is a keyspace identifier.
@@ -65,9 +69,9 @@ message PutObjectRequest {
   // Clients can choose to encrypt the keys client-side in order to obfuscate their usage patterns.
   // If the write is successful, the previous value corresponding to the key will be overwritten.
   //
-  // Multiple items in transaction_items of a single PutObjectRequest are written in
+  // Multiple items in transaction_items and delete_items of a single PutObjectRequest are written in
   // a database-transaction in an all-or-nothing fashion.
-  // Items in a single PutObjectRequest must have distinct keys.
+  // All Items in a single PutObjectRequest must have distinct keys.
   //
   // Clients are expected to store a version against every key.
   // The write will succeed if the current DB version against the key is the same as in the request.
@@ -93,11 +97,56 @@ message PutObjectRequest {
   // All PutObjectRequests are strongly consistent i.e. they provide read-after-write and
   // read-after-update consistency guarantees.
   repeated KeyValue transaction_items = 3;
+
+  // Items to be deleted as a result of this PutObjectRequest.
+  //
+  // Each item in the `delete_items` field consists of a key and its corresponding version.
+  // The version is used to perform a version check before deleting the item.
+  // The delete will only succeed if the current database version against the key is the same as the version
+  // specified in the request.
+  //
+  // Fails with `CONFLICT_EXCEPTION` as the ErrorCode if:
+  //   * The requested item does not exist.
+  //   * The requested item does exist but there is a version-number mismatch with the one in the database.
+  //
+  // Multiple items in the `delete_items` field, along with the `transaction_items`, are written in a
+  // database transaction in an all-or-nothing fashion.
+  //
+  // All items within a single `PutObjectRequest` must have distinct keys.
+  repeated KeyValue delete_items = 4;
 }
 
+// Server response for `PutObject` API.
 message PutObjectResponse {
 }
 
+// Request payload to be used for `DeleteObject` API call to server.
+message DeleteObjectRequest {
+  // store_id is a keyspace identifier.
+  // Ref: https://en.wikipedia.org/wiki/Keyspace_(distributed_data_store)
+  // All APIs operate within a single store_id.
+  // It is up to clients to use single or multiple stores for their use-case.
+  // This can be used for client-isolation/ rate-limiting / throttling on the server-side.
+  // Authorization and billing can also be performed at the store_id level.
+  string store_id = 1;
+
+  // Item to be deleted as a result of this DeleteObjectRequest.
+  //
+  // An item consists of a key and its corresponding version.
+  // The item is only deleted if the current database version against the key is the same as the version
+  // specified in the request.
+  // This operation is idempotent, that is, multiple delete calls for the same item will not fail.
+  //
+  // If the requested item does not exist, this operation will not fail.
+  // If you wish to perform stricter checks while deleting an item, consider using PutObject API.
+  KeyValue key_value = 2;
+}
+
+// Server response for `DeleteObject` API.
+message DeleteObjectResponse{
+}
+
+// Request payload to be used for `ListKeyVersions` API call to server.
 message ListKeyVersionsRequest {
 
   // store_id is a keyspace identifier.
@@ -133,6 +182,7 @@ message ListKeyVersionsRequest {
   optional string page_token = 4;
 }
 
+// Server response for `ListKeyVersions` API.
 message ListKeyVersionsResponse {
 
   // Fetched keys and versions.
@@ -206,6 +256,7 @@ enum ErrorCode {
   INTERNAL_SERVER_EXCEPTION = 3;
 }
 
+// Represents KeyValue pair to be stored or retrieved.
 message KeyValue {
 
   // Key against which the value is stored.
