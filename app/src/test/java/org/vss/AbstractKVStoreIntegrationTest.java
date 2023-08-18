@@ -29,15 +29,26 @@ public abstract class AbstractKVStoreIntegrationTest {
 
   @Test
   void putShouldSucceedWhenSingleObjectPutOperation() {
+    // Conditional Put
     assertDoesNotThrow(() -> putObjects(0L, List.of(kv("k1", "k1v1", 0))));
     assertDoesNotThrow(() -> putObjects(1L, List.of(kv("k1", "k1v2", 1))));
+
+    // NonConditional Put
+    assertDoesNotThrow(() -> putObjects(2L, List.of(kv("k2", "k2v1", -1))));
+    assertDoesNotThrow(() -> putObjects(3L, List.of(kv("k2", "k2v2", -1))));
+    assertDoesNotThrow(() -> putObjects(4L, List.of(kv("k2", "k2v3", -1))));
 
     KeyValue response = getObject("k1");
     assertThat(response.getKey(), is("k1"));
     assertThat(response.getVersion(), is(2L));
     assertThat(response.getValue().toStringUtf8(), is("k1v2"));
 
-    assertThat(getObject(KVStore.GLOBAL_VERSION_KEY).getVersion(), is(2L));
+    response = getObject("k2");
+    assertThat(response.getKey(), is("k2"));
+    assertThat(response.getVersion(), is(1L));
+    assertThat(response.getValue().toStringUtf8(), is("k1v3"));
+
+    assertThat(getObject(KVStore.GLOBAL_VERSION_KEY).getVersion(), is(5L));
   }
 
   @Test
@@ -168,9 +179,19 @@ public abstract class AbstractKVStoreIntegrationTest {
   @Test
   void deleteShouldSucceedWhenItemExists() {
     assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
+    // Conditional Delete
     assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
 
     KeyValue response = getObject("k1");
+    assertThat(response.getKey(), is("k1"));
+    assertTrue(response.getValue().isEmpty());
+
+    assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
+    assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v2", 1))));
+    // NonConditional Delete
+    assertDoesNotThrow(() -> deleteObject(kv("k1", "", -1)));
+
+    response = getObject("k1");
     assertThat(response.getKey(), is("k1"));
     assertTrue(response.getValue().isEmpty());
   }

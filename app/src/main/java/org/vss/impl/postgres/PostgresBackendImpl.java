@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import javax.inject.Singleton;
 import org.jooq.DSLContext;
+import org.jooq.DeleteConditionStep;
 import org.jooq.Insert;
 import org.jooq.Query;
 import org.jooq.Update;
@@ -108,24 +109,55 @@ public class PostgresBackendImpl implements KVStore {
   }
 
   private Query buildDeleteObjectQuery(DSLContext dsl, VssDbRecord vssRecord) {
+    if (vssRecord.getVersion() == -1) {
+      return buildNonConditionalDeleteQuery(dsl, vssRecord);
+    } else {
+      return buildConditionalDeleteQuery(dsl, vssRecord);
+    }
+  }
+
+  private static DeleteConditionStep<VssDbRecord> buildNonConditionalDeleteQuery(DSLContext dsl,
+      VssDbRecord vssRecord) {
+    return dsl.deleteFrom(VSS_DB).where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
+        .and(VSS_DB.KEY.eq(vssRecord.getKey())));
+  }
+
+  private static DeleteConditionStep<VssDbRecord> buildConditionalDeleteQuery(DSLContext dsl,
+      VssDbRecord vssRecord) {
     return dsl.deleteFrom(VSS_DB).where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
         .and(VSS_DB.KEY.eq(vssRecord.getKey()))
         .and(VSS_DB.VERSION.eq(vssRecord.getVersion())));
   }
 
   private Query buildPutObjectQuery(DSLContext dsl, VssDbRecord vssRecord) {
-    return vssRecord.getVersion() == 0 ? buildInsertRecordQuery(dsl, vssRecord)
-        : buildUpdateRecordQuery(dsl, vssRecord);
+    if (vssRecord.getVersion() == -1) {
+      return buildNonConditionalUpsertRecordQuery(dsl, vssRecord);
+    } else if (vssRecord.getVersion() == 0) {
+      return buildConditionalInsertRecordQuery(dsl, vssRecord);
+    } else {
+      return buildConditionalUpdateRecordQuery(dsl, vssRecord);
+    }
   }
 
-  private Insert<VssDbRecord> buildInsertRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
+  private Query buildNonConditionalUpsertRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
+    return dsl.insertInto(VSS_DB)
+        .values(vssRecord.getStoreId(), vssRecord.getKey(),
+            vssRecord.getValue(), 1)
+        .onConflict(VSS_DB.STORE_ID, VSS_DB.KEY)
+        .doUpdate()
+        .set(VSS_DB.VALUE, vssRecord.getValue())
+        .set(VSS_DB.VERSION, 1L);
+  }
+
+  private Insert<VssDbRecord> buildConditionalInsertRecordQuery(DSLContext dsl,
+      VssDbRecord vssRecord) {
     return dsl.insertInto(VSS_DB)
         .values(vssRecord.getStoreId(), vssRecord.getKey(),
             vssRecord.getValue(), 1)
         .onDuplicateKeyIgnore();
   }
 
-  private Update<VssDbRecord> buildUpdateRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
+  private Update<VssDbRecord> buildConditionalUpdateRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
     return dsl.update(VSS_DB)
         .set(Map.of(VSS_DB.VALUE, vssRecord.getValue(),
             VSS_DB.VERSION, vssRecord.getVersion() + 1))
