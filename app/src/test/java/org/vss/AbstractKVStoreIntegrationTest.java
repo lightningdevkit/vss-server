@@ -46,7 +46,7 @@ public abstract class AbstractKVStoreIntegrationTest {
     response = getObject("k2");
     assertThat(response.getKey(), is("k2"));
     assertThat(response.getVersion(), is(1L));
-    assertThat(response.getValue().toStringUtf8(), is("k1v3"));
+    assertThat(response.getValue().toStringUtf8(), is("k2v3"));
 
     assertThat(getObject(KVStore.GLOBAL_VERSION_KEY).getVersion(), is(5L));
   }

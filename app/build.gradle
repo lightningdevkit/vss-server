@@ -1,6 +1,5 @@
 buildscript {
-  ext.gradleVersion = '7.5.1'
-  ext.protobufPlugInVersion = '0.8.12'
+  ext.protobufPlugInVersion = '0.9.4'
   ext.protobufVersion = '3.21.7'
   ext.jerseyVersion = '3.1.0'
   ext.junitVersion = '5.9.0'
