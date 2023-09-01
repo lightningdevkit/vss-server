@@ -79,7 +79,7 @@ jooq {
           driver = 'org.postgresql.Driver'
           url = 'jdbc:postgresql://localhost:5432/postgres'
           user = 'postgres'
-          password = ''
+          password = 'YOU_MUST_CHANGE_THIS_PASSWORD'
           properties {
             property {
               key = 'ssl'
