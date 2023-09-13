@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.shaded.org.apache.commons.lang3.StringUtils;
 import org.vss.exception.ConflictException;
+import org.vss.exception.NoSuchKeyException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -19,7 +20,6 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public abstract class AbstractKVStoreIntegrationTest {
 
@@ -153,25 +153,25 @@ public abstract class AbstractKVStoreIntegrationTest {
     assertThat(response.getVersion(), is(1L));
     assertThat(response.getValue().toStringUtf8(), is("k2v1"));
 
-    assertTrue(getObject("k1").getValue().isEmpty());
+    assertThrows(NoSuchKeyException.class, () -> getObject("k1"));
 
     // Delete fails (and hence put as well) due to mismatched version for the deleted item.
     assertThrows(ConflictException.class, () -> putAndDeleteObjects(null, List.of(kv("k3", "k3v1", 0)), List.of(kv("k2", "", 3))));
 
-    assertTrue(getObject("k3").getValue().isEmpty());
-    assertFalse(getObject("k2").getValue().isEmpty());
+    assertThrows(NoSuchKeyException.class, () -> getObject("k3"));
+    assertDoesNotThrow(() -> getObject("k2"));
 
     // Put fails (and hence delete as well) due to mismatched version for the put item.
     assertThrows(ConflictException.class, () -> putAndDeleteObjects(null, List.of(kv("k3", "k3v1", 1)), List.of(kv("k2", "", 1))));
 
-    assertTrue(getObject("k3").getValue().isEmpty());
-    assertFalse(getObject("k2").getValue().isEmpty());
+    assertThrows(NoSuchKeyException.class, () -> getObject("k3"));
+    assertDoesNotThrow(() -> getObject("k2"));
 
     // Put and delete both fail due to mismatched global version.
     assertThrows(ConflictException.class, () -> putAndDeleteObjects(2L, List.of(kv("k3", "k3v1", 0)), List.of(kv("k2", "", 1))));
 
-    assertTrue(getObject("k3").getValue().isEmpty());
-    assertFalse(getObject("k2").getValue().isEmpty());
+    assertThrows(NoSuchKeyException.class, () -> getObject("k3"));
+    assertDoesNotThrow(() -> getObject("k2"));
 
     assertThat(getObject(KVStore.GLOBAL_VERSION_KEY).getVersion(), is(0L));
   }
@@ -182,18 +182,14 @@ public abstract class AbstractKVStoreIntegrationTest {
     // Conditional Delete
     assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
 
-    KeyValue response = getObject("k1");
-    assertThat(response.getKey(), is("k1"));
-    assertTrue(response.getValue().isEmpty());
+    assertThrows(NoSuchKeyException.class, () -> getObject("k1"));
 
     assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v1", 0))));
     assertDoesNotThrow(() -> putObjects(null, List.of(kv("k1", "k1v2", 1))));
     // NonConditional Delete
     assertDoesNotThrow(() -> deleteObject(kv("k1", "", -1)));
 
-    response = getObject("k1");
-    assertThat(response.getKey(), is("k1"));
-    assertTrue(response.getValue().isEmpty());
+    assertThrows(NoSuchKeyException.class, () -> getObject("k1"));
   }
 
   @Test
@@ -207,18 +203,12 @@ public abstract class AbstractKVStoreIntegrationTest {
     assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
     assertDoesNotThrow(() -> deleteObject(kv("k1", "", 1)));
 
-    KeyValue response = getObject("k1");
-    assertThat(response.getKey(), is("k1"));
-    assertTrue(response.getValue().isEmpty());
+    assertThrows(NoSuchKeyException.class, () -> getObject("k1"));
   }
 
   @Test
-  void getShouldReturnEmptyResponseWhenKeyDoesNotExist() {
-    KeyValue response = getObject("non_existent_key");
-
-    assertThat(response.getKey(), is("non_existent_key"));
-    assertTrue(response.getValue().isEmpty());
-    assertThat(response.getVersion(), is(0L));
+  void getShouldThrowNoSuchKeyExceptionWhenKeyDoesNotExist() {
+    assertThrows(NoSuchKeyException.class, () -> getObject("non_existent_key"));
   }
 
   @Test

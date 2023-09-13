@@ -8,6 +8,7 @@ import org.vss.ErrorCode;
 import org.vss.ErrorResponse;
 import org.vss.KVStore;
 import org.vss.exception.ConflictException;
+import org.vss.exception.NoSuchKeyException;
 
 public abstract class AbstractVssApi {
   final KVStore kvStore;
@@ -32,6 +33,8 @@ public abstract class AbstractVssApi {
     } else if (e instanceof IllegalArgumentException
         || e instanceof InvalidProtocolBufferException) {
       errorCode = ErrorCode.INVALID_REQUEST_EXCEPTION;
+    } else if (e instanceof NoSuchKeyException) {
+      errorCode = ErrorCode.NO_SUCH_KEY_EXCEPTION;
     } else {
       errorCode = ErrorCode.INTERNAL_SERVER_EXCEPTION;
     }
