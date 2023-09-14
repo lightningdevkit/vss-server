@@ -23,6 +23,7 @@ import org.vss.ListKeyVersionsResponse;
 import org.vss.PutObjectRequest;
 import org.vss.PutObjectResponse;
 import org.vss.exception.ConflictException;
+import org.vss.exception.NoSuchKeyException;
 import org.vss.postgres.tables.records.VssDbRecord;
 
 import static org.vss.postgres.tables.VssDb.VSS_DB;
@@ -31,6 +32,11 @@ import static org.vss.postgres.tables.VssDb.VSS_DB;
 public class PostgresBackendImpl implements KVStore {
 
   private static final int LIST_KEY_VERSIONS_MAX_PAGE_SIZE = 100;
+  private static final KeyValue DEFAULT_GLOBAL_VERSION_KV = KeyValue.newBuilder()
+      .setKey(GLOBAL_VERSION_KEY)
+      .setValue(ByteString.EMPTY)
+      .setVersion(0L)
+      .build();
   private final DSLContext context;
 
   @Inject
@@ -47,16 +53,19 @@ public class PostgresBackendImpl implements KVStore {
         .fetchOne();
 
     final KeyValue keyValue;
-
-    if (vssDbRecord != null) {
+    if (vssDbRecord == null) {
+      if (GLOBAL_VERSION_KEY.equals(request.getKey())) {
+        keyValue = DEFAULT_GLOBAL_VERSION_KV;
+      } else {
+        throw new NoSuchKeyException(
+            "Specified key: " + request.getKey() + " in request does not exist.");
+      }
+    } else {
       keyValue = KeyValue.newBuilder()
           .setKey(vssDbRecord.getKey())
           .setValue(ByteString.copyFrom(vssDbRecord.getValue()))
           .setVersion(vssDbRecord.getVersion())
           .build();
-    } else {
-      keyValue = KeyValue.newBuilder()
-          .setKey(request.getKey()).build();
     }
 
     return GetObjectResponse.newBuilder()

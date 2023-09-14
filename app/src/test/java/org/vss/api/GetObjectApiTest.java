@@ -16,6 +16,7 @@ import org.vss.GetObjectResponse;
 import org.vss.KVStore;
 import org.vss.KeyValue;
 import org.vss.exception.ConflictException;
+import org.vss.exception.NoSuchKeyException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -80,6 +81,7 @@ class GetObjectApiTest {
     return Stream.of(
         Arguments.of(new ConflictException(""), ErrorCode.CONFLICT_EXCEPTION),
         Arguments.of(new IllegalArgumentException(""), ErrorCode.INVALID_REQUEST_EXCEPTION),
+        Arguments.of(new NoSuchKeyException(""), ErrorCode.NO_SUCH_KEY_EXCEPTION),
         Arguments.of(new RuntimeException(""), ErrorCode.INTERNAL_SERVER_EXCEPTION)
     );
   }
