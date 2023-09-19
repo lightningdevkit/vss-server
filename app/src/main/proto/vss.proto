@@ -14,10 +14,10 @@ message GetObjectRequest {
   // Authorization and billing can also be performed at the `store_id` level.
   string store_id = 1;
 
-  // `Key` for which the value is to be fetched.
+  // The key of the value to be fetched.
   //
-  // If the specified `key` does not exist, returns `ErrorResponse` with `NO_SUCH_KEY_EXCEPTION` as
-  // `ErrorCode`.
+  // If the specified `key` does not exist, returns `ErrorCode.NO_SUCH_KEY_EXCEPTION` in the
+  // the `ErrorResponse`.
   //
   // Consistency Guarantee:
   // Get(read) operations against a `key` are consistent reads and will reflect all previous writes,
@@ -266,21 +266,21 @@ enum ErrorCode {
   // Default protobuf Enum value. Will not be used as `ErrorCode` by server.
   UNKNOWN = 0;
 
-  // CONFLICT_EXCEPTION is used when the request contains mismatched version (either key or global)
+  // Used when the request contains mismatched version (either key or global)
   // in `PutObjectRequest`. For more info refer `PutObjectRequest`.
   CONFLICT_EXCEPTION= 1;
 
-  // INVALID_REQUEST_EXCEPTION is used in the following cases:
+  // Used in the following cases:
   //   - The request was missing a required argument.
   //   - The specified argument was invalid, incomplete or in the wrong format.
   //   - The request body of api cannot be deserialized into corresponding protobuf object.
   INVALID_REQUEST_EXCEPTION = 2;
 
-  // An internal server error occurred, client is probably at no fault and can safely retry this
-  // error with exponential backoff.
+  // Used when an internal server error occurred, client is probably at no fault and can safely retry
+  // this error with exponential backoff.
   INTERNAL_SERVER_EXCEPTION = 3;
 
-  // NO_SUCH_KEY_EXCEPTION is used when the specified `key` in a `GetObjectRequest` does not exist.
+  // Used when the specified `key` in a `GetObjectRequest` does not exist.
   NO_SUCH_KEY_EXCEPTION = 4;
 }
 
