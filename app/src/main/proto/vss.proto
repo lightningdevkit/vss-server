@@ -299,7 +299,48 @@ message KeyValue {
   int64 version = 2;
 
   // Object value in bytes which is stored (in put) and fetched (in get).
-  // Clients must encrypt this blob client-side before sending it over the wire to server in order
-  // to preserve privacy and security.
+  // Clients must encrypt the secret contents of this blob client-side before sending it over the
+  // wire to the server in order to preserve privacy and security.
+  // Clients may use a `Storable` object, serialize it and set it here.
   bytes value = 3;
+}
+
+// Represents a storable object that can be serialized and stored as `value` in `PutObjectRequest`.
+// Only provided as a helper object for ease of use by clients.
+// Clients MUST encrypt the `PlaintextBlob` before using it as `data` in `Storable`.
+// The server does not use or read anything from `Storable`, Clients may use its fields as
+// required.
+message Storable {
+
+  // Represents an encrypted and serialized `PlaintextBlob`. MUST encrypt the whole `PlaintextBlob`
+  // using client-side encryption before setting here.
+  bytes data = 1;
+
+  // Represents encryption related metadata
+  EncryptionMetadata encryption_metadata = 2;
+}
+
+// Represents encryption related metadata
+message EncryptionMetadata {
+  // The encryption algorithm used for encrypting the `PlaintextBlob`.
+  string cipher_format = 1;
+
+  // The nonce used for encryption. Nonce is a random or unique value used to ensure that the same
+  // plaintext results in different ciphertexts every time it is encrypted.
+  bytes nonce = 2;
+
+  // The authentication tag used for encryption. It provides integrity and authenticity assurance
+  // for the encrypted data.
+  bytes tag = 3;
+}
+
+// Represents a data blob, which is encrypted, serialized and later used in `Storable.data`.
+// Since the whole `Storable.data` is client-side encrypted, the server cannot understand this.
+message PlaintextBlob {
+
+  // The unencrypted value.
+  bytes value = 1;
+
+  // The version of the value. Can be used by client to verify version integrity.
+  int64 version = 2;
 }
