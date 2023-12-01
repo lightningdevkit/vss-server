@@ -61,7 +61,7 @@ public class PutObjectsApiTest {
   @ParameterizedTest
   @MethodSource("provideErrorTestCases")
   void execute_InvalidPayload_ReturnsErrorResponse(Exception exception,
-      ErrorCode errorCode) {
+      ErrorCode errorCode, int statusCode) {
     PutObjectRequest expectedRequest =
         PutObjectRequest.newBuilder()
             .setStoreId(TEST_STORE_ID)
@@ -77,15 +77,15 @@ public class PutObjectsApiTest {
         .setMessage("")
         .build();
     assertThat(response.getEntity(), is(expectedErrorResponse.toByteArray()));
-    assertThat(response.getStatus(), is(expectedErrorResponse.getErrorCode().getNumber()));
+    assertThat(response.getStatus(), is(statusCode));
     verify(mockKVStore).put(expectedRequest);
   }
 
   private static Stream<Arguments> provideErrorTestCases() {
     return Stream.of(
-        Arguments.of(new ConflictException(""), ErrorCode.CONFLICT_EXCEPTION),
-        Arguments.of(new IllegalArgumentException(""), ErrorCode.INVALID_REQUEST_EXCEPTION),
-        Arguments.of(new RuntimeException(""), ErrorCode.INTERNAL_SERVER_EXCEPTION)
+        Arguments.of(new ConflictException(""), ErrorCode.CONFLICT_EXCEPTION, 409),
+        Arguments.of(new IllegalArgumentException(""), ErrorCode.INVALID_REQUEST_EXCEPTION, 400),
+        Arguments.of(new RuntimeException(""), ErrorCode.INTERNAL_SERVER_EXCEPTION, 500)
     );
   }
 }
