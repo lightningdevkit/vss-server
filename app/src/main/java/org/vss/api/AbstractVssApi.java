@@ -28,15 +28,20 @@ public abstract class AbstractVssApi {
 
   Response toErrorResponse(Exception e) {
     ErrorCode errorCode;
+    int statusCode;
     if (e instanceof ConflictException) {
       errorCode = ErrorCode.CONFLICT_EXCEPTION;
+      statusCode = 409;
     } else if (e instanceof IllegalArgumentException
         || e instanceof InvalidProtocolBufferException) {
       errorCode = ErrorCode.INVALID_REQUEST_EXCEPTION;
+      statusCode = 400;
     } else if (e instanceof NoSuchKeyException) {
       errorCode = ErrorCode.NO_SUCH_KEY_EXCEPTION;
+      statusCode = 404;
     } else {
       errorCode = ErrorCode.INTERNAL_SERVER_EXCEPTION;
+      statusCode = 500;
     }
 
     ErrorResponse errorResponse = ErrorResponse.newBuilder()
@@ -44,7 +49,7 @@ public abstract class AbstractVssApi {
         .setMessage(e.getMessage())
         .build();
 
-    return Response.status(errorCode.getNumber())
+    return Response.status(statusCode)
         .entity(errorResponse.toByteArray())
         .build();
   }

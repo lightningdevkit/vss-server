@@ -58,7 +58,7 @@ class GetObjectApiTest {
   @ParameterizedTest
   @MethodSource("provideErrorTestCases")
   void execute_InvalidPayload_ReturnsErrorResponse(Exception exception,
-      ErrorCode errorCode) {
+      ErrorCode errorCode, int statusCode) {
     GetObjectRequest expectedRequest = GetObjectRequest.newBuilder()
         .setStoreId(TEST_STORE_ID)
         .setKey(TEST_KEY)
@@ -73,16 +73,16 @@ class GetObjectApiTest {
         .setMessage("")
         .build();
     assertThat(response.getEntity(), is(expectedErrorResponse.toByteArray()));
-    assertThat(response.getStatus(), is(expectedErrorResponse.getErrorCode().getNumber()));
+    assertThat(response.getStatus(), is(statusCode));
     verify(mockKVStore).get(expectedRequest);
   }
 
   private static Stream<Arguments> provideErrorTestCases() {
     return Stream.of(
-        Arguments.of(new ConflictException(""), ErrorCode.CONFLICT_EXCEPTION),
-        Arguments.of(new IllegalArgumentException(""), ErrorCode.INVALID_REQUEST_EXCEPTION),
-        Arguments.of(new NoSuchKeyException(""), ErrorCode.NO_SUCH_KEY_EXCEPTION),
-        Arguments.of(new RuntimeException(""), ErrorCode.INTERNAL_SERVER_EXCEPTION)
+        Arguments.of(new ConflictException(""), ErrorCode.CONFLICT_EXCEPTION, 409),
+        Arguments.of(new IllegalArgumentException(""), ErrorCode.INVALID_REQUEST_EXCEPTION, 400),
+        Arguments.of(new NoSuchKeyException(""), ErrorCode.NO_SUCH_KEY_EXCEPTION, 404),
+        Arguments.of(new RuntimeException(""), ErrorCode.INTERNAL_SERVER_EXCEPTION, 500)
     );
   }
 }
