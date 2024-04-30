@@ -268,7 +268,7 @@ enum ErrorCode {
 
   // Used when the request contains mismatched version (either key or global)
   // in `PutObjectRequest`. For more info refer `PutObjectRequest`.
-  CONFLICT_EXCEPTION= 1;
+  CONFLICT_EXCEPTION = 1;
 
   // Used in the following cases:
   //   - The request was missing a required argument.
@@ -282,6 +282,9 @@ enum ErrorCode {
 
   // Used when the specified `key` in a `GetObjectRequest` does not exist.
   NO_SUCH_KEY_EXCEPTION = 4;
+
+  // Used when authentication fails or in case of an unauthorized request.
+  AUTH_EXCEPTION = 5;
 }
 
 // Represents a key-value pair to be stored or retrieved.
