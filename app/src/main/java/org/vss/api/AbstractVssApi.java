@@ -7,6 +7,7 @@ import jakarta.ws.rs.core.Response;
 import org.vss.ErrorCode;
 import org.vss.ErrorResponse;
 import org.vss.KVStore;
+import org.vss.exception.AuthException;
 import org.vss.exception.ConflictException;
 import org.vss.exception.NoSuchKeyException;
 
@@ -39,6 +40,9 @@ public abstract class AbstractVssApi {
     } else if (e instanceof NoSuchKeyException) {
       errorCode = ErrorCode.NO_SUCH_KEY_EXCEPTION;
       statusCode = 404;
+    } else if (e instanceof AuthException) {
+      errorCode = ErrorCode.AUTH_EXCEPTION;
+      statusCode = 401;
     } else {
       errorCode = ErrorCode.INTERNAL_SERVER_EXCEPTION;
       statusCode = 500;
