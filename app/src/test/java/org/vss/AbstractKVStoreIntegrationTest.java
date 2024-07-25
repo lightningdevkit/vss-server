@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public abstract class AbstractKVStoreIntegrationTest {
 
+  private final String USER_TOKEN = "userToken";
   private final String STORE_ID = "storeId";
 
   protected KVStore kvStore;
@@ -426,7 +427,7 @@ public abstract class AbstractKVStoreIntegrationTest {
         .setStoreId(STORE_ID)
         .setKey(key)
         .build();
-    return this.kvStore.get(getRequest).getValue();
+    return this.kvStore.get(USER_TOKEN, getRequest).getValue();
   }
 
   private void putObjects(@Nullable Long globalVersion, List<KeyValue> keyValues) {
@@ -438,7 +439,7 @@ public abstract class AbstractKVStoreIntegrationTest {
       putObjectRequestBuilder.setGlobalVersion(globalVersion);
     }
 
-    this.kvStore.put(putObjectRequestBuilder.build());
+    this.kvStore.put(USER_TOKEN, putObjectRequestBuilder.build());
   }
 
   private void putAndDeleteObjects(@Nullable Long globalVersion, List<KeyValue> putKeyValues, List<KeyValue> deleteKeyValues) {
@@ -451,13 +452,13 @@ public abstract class AbstractKVStoreIntegrationTest {
       putObjectRequestBuilder.setGlobalVersion(globalVersion);
     }
 
-    this.kvStore.put(putObjectRequestBuilder.build());
+    this.kvStore.put(USER_TOKEN, putObjectRequestBuilder.build());
   }
 
   private void deleteObject(KeyValue keyValue) {
     DeleteObjectRequest request = DeleteObjectRequest.newBuilder()
         .setStoreId(STORE_ID).setKeyValue(keyValue).build();
-    this.kvStore.delete(request);
+    this.kvStore.delete(USER_TOKEN, request);
   }
 
   private ListKeyVersionsResponse list(@Nullable String nextPageToken, @Nullable Integer pageSize,
@@ -475,7 +476,7 @@ public abstract class AbstractKVStoreIntegrationTest {
       listRequestBuilder.setKeyPrefix(keyPrefix);
     }
 
-    return this.kvStore.listKeyVersions(listRequestBuilder.build());
+    return this.kvStore.listKeyVersions(USER_TOKEN, listRequestBuilder.build());
   }
 
   private KeyValue kv(String key, String value, int version) {

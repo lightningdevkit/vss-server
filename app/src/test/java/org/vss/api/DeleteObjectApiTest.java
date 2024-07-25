@@ -1,6 +1,7 @@
 package org.vss.api;
 
 import com.google.protobuf.ByteString;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
@@ -15,6 +16,8 @@ import org.vss.ErrorCode;
 import org.vss.ErrorResponse;
 import org.vss.KVStore;
 import org.vss.KeyValue;
+import org.vss.auth.AuthResponse;
+import org.vss.auth.Authorizer;
 import org.vss.exception.ConflictException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -27,7 +30,10 @@ import static org.mockito.Mockito.when;
 public class DeleteObjectApiTest {
   private DeleteObjectApi deleteObjectApi;
   private KVStore mockKVStore;
+  private Authorizer mockAuthorizer;
+  private HttpHeaders mockHeaders;
 
+  private static String TEST_USER_TOKEN = "userToken";
   private static String TEST_STORE_ID = "storeId";
   private static String TEST_KEY = "key";
   private static KeyValue TEST_KV = KeyValue.newBuilder().setKey(TEST_KEY).setValue(
@@ -36,7 +42,10 @@ public class DeleteObjectApiTest {
   @BeforeEach
   void setUp() {
     mockKVStore = mock(KVStore.class);
-    deleteObjectApi = new DeleteObjectApi(mockKVStore);
+    mockAuthorizer = mock(Authorizer.class);
+    deleteObjectApi = new DeleteObjectApi(mockKVStore, mockAuthorizer);
+    mockHeaders = mock(HttpHeaders.class);
+    when(mockAuthorizer.verify(any())).thenReturn(new AuthResponse(TEST_USER_TOKEN));
   }
 
   @Test
@@ -47,13 +56,13 @@ public class DeleteObjectApiTest {
         ).build();
     byte[] payload = expectedRequest.toByteArray();
     DeleteObjectResponse mockResponse = DeleteObjectResponse.newBuilder().build();
-    when(mockKVStore.delete(expectedRequest)).thenReturn(mockResponse);
+    when(mockKVStore.delete(TEST_USER_TOKEN, expectedRequest)).thenReturn(mockResponse);
 
-    Response actualResponse = deleteObjectApi.execute(payload);
+    Response actualResponse = deleteObjectApi.execute(payload, mockHeaders);
 
     assertThat(actualResponse.getStatus(), is(Response.Status.OK.getStatusCode()));
     assertThat(actualResponse.getEntity(), is(mockResponse.toByteArray()));
-    verify(mockKVStore).delete(expectedRequest);
+    verify(mockKVStore).delete(TEST_USER_TOKEN, expectedRequest);
   }
 
   @ParameterizedTest
@@ -65,9 +74,9 @@ public class DeleteObjectApiTest {
             KeyValue.newBuilder().setKey(TEST_KEY).setVersion(0)
         ).build();
     byte[] payload = expectedRequest.toByteArray();
-    when(mockKVStore.delete(any())).thenThrow(exception);
+    when(mockKVStore.delete(any(), any())).thenThrow(exception);
 
-    Response response = deleteObjectApi.execute(payload);
+    Response response = deleteObjectApi.execute(payload, mockHeaders);
 
     ErrorResponse expectedErrorResponse = ErrorResponse.newBuilder()
         .setErrorCode(errorCode)
@@ -75,7 +84,7 @@ public class DeleteObjectApiTest {
         .build();
     assertThat(response.getEntity(), is(expectedErrorResponse.toByteArray()));
     assertThat(response.getStatus(), is(statusCode));
-    verify(mockKVStore).delete(expectedRequest);
+    verify(mockKVStore).delete(TEST_USER_TOKEN, expectedRequest);
   }
 
   private static Stream<Arguments> provideErrorTestCases() {

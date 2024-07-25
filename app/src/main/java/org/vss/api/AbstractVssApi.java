@@ -7,16 +7,19 @@ import jakarta.ws.rs.core.Response;
 import org.vss.ErrorCode;
 import org.vss.ErrorResponse;
 import org.vss.KVStore;
+import org.vss.auth.Authorizer;
 import org.vss.exception.AuthException;
 import org.vss.exception.ConflictException;
 import org.vss.exception.NoSuchKeyException;
 
 public abstract class AbstractVssApi {
   final KVStore kvStore;
+  final Authorizer authorizer;
 
   @Inject
-  public AbstractVssApi(KVStore kvStore) {
+  public AbstractVssApi(KVStore kvStore, Authorizer authorizer) {
     this.kvStore = kvStore;
+    this.authorizer = authorizer;
   }
 
   Response toResponse(GeneratedMessageV3 protoResponse) {

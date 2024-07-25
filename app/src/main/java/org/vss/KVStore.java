@@ -4,11 +4,11 @@ public interface KVStore {
 
   String GLOBAL_VERSION_KEY = "vss_global_version";
 
-  GetObjectResponse get(GetObjectRequest request);
+  GetObjectResponse get(String userToken, GetObjectRequest request);
 
-  PutObjectResponse put(PutObjectRequest request);
+  PutObjectResponse put(String userToken, PutObjectRequest request);
 
-  DeleteObjectResponse delete(DeleteObjectRequest request);
+  DeleteObjectResponse delete(String userToken, DeleteObjectRequest request);
 
-  ListKeyVersionsResponse listKeyVersions(ListKeyVersionsRequest request);
+  ListKeyVersionsResponse listKeyVersions(String userToken, ListKeyVersionsRequest request);
 }

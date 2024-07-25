@@ -48,11 +48,12 @@ public class PostgresBackendImpl implements KVStore {
   }
 
   @Override
-  public GetObjectResponse get(GetObjectRequest request) {
+  public GetObjectResponse get(String userToken, GetObjectRequest request) {
 
     VssDbRecord vssDbRecord = context.selectFrom(VSS_DB)
-        .where(VSS_DB.STORE_ID.eq(request.getStoreId())
-            .and(VSS_DB.KEY.eq(request.getKey())))
+        .where(VSS_DB.USER_TOKEN.eq(userToken)
+            .and(VSS_DB.STORE_ID.eq(request.getStoreId())
+                .and(VSS_DB.KEY.eq(request.getKey()))))
         .fetchOne();
 
     final KeyValue keyValue;
@@ -77,18 +78,18 @@ public class PostgresBackendImpl implements KVStore {
   }
 
   @Override
-  public PutObjectResponse put(PutObjectRequest request) {
+  public PutObjectResponse put(String userToken, PutObjectRequest request) {
 
     String storeId = request.getStoreId();
 
     List<VssDbRecord> vssPutRecords = new ArrayList<>(request.getTransactionItemsList().stream()
-        .map(kv -> buildVssRecord(storeId, kv)).toList());
+        .map(kv -> buildVssRecord(userToken, storeId, kv)).toList());
 
     List<VssDbRecord> vssDeleteRecords = new ArrayList<>(request.getDeleteItemsList().stream()
-        .map(kv -> buildVssRecord(storeId, kv)).toList());
+        .map(kv -> buildVssRecord(userToken, storeId, kv)).toList());
 
     if (request.hasGlobalVersion()) {
-      VssDbRecord globalVersionRecord = buildVssRecord(storeId,
+      VssDbRecord globalVersionRecord = buildVssRecord(userToken, storeId,
           KeyValue.newBuilder()
               .setKey(GLOBAL_VERSION_KEY)
               .setVersion(request.getGlobalVersion())
@@ -130,15 +131,17 @@ public class PostgresBackendImpl implements KVStore {
 
   private static DeleteConditionStep<VssDbRecord> buildNonConditionalDeleteQuery(DSLContext dsl,
       VssDbRecord vssRecord) {
-    return dsl.deleteFrom(VSS_DB).where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
-        .and(VSS_DB.KEY.eq(vssRecord.getKey())));
+    return dsl.deleteFrom(VSS_DB).where(VSS_DB.USER_TOKEN.eq(vssRecord.getUserToken())
+        .and(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
+        .and(VSS_DB.KEY.eq(vssRecord.getKey()))));
   }
 
   private static DeleteConditionStep<VssDbRecord> buildConditionalDeleteQuery(DSLContext dsl,
       VssDbRecord vssRecord) {
-    return dsl.deleteFrom(VSS_DB).where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
+    return dsl.deleteFrom(VSS_DB).where(VSS_DB.USER_TOKEN.eq(vssRecord.getUserToken())
+        .and(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
         .and(VSS_DB.KEY.eq(vssRecord.getKey()))
-        .and(VSS_DB.VERSION.eq(vssRecord.getVersion())));
+        .and(VSS_DB.VERSION.eq(vssRecord.getVersion()))));
   }
 
   private Query buildPutObjectQuery(DSLContext dsl, VssDbRecord vssRecord) {
@@ -153,9 +156,9 @@ public class PostgresBackendImpl implements KVStore {
 
   private Query buildNonConditionalUpsertRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
     return dsl.insertInto(VSS_DB)
-        .values(vssRecord.getStoreId(), vssRecord.getKey(),
+        .values(vssRecord.getUserToken(), vssRecord.getStoreId(), vssRecord.getKey(),
             vssRecord.getValue(), 1, vssRecord.getCreatedAt(), vssRecord.getLastUpdatedAt())
-        .onConflict(VSS_DB.STORE_ID, VSS_DB.KEY)
+        .onConflict(VSS_DB.USER_TOKEN, VSS_DB.STORE_ID, VSS_DB.KEY)
         .doUpdate()
         .set(VSS_DB.VALUE, vssRecord.getValue())
         .set(VSS_DB.VERSION, 1L)
@@ -165,7 +168,7 @@ public class PostgresBackendImpl implements KVStore {
   private Insert<VssDbRecord> buildConditionalInsertRecordQuery(DSLContext dsl,
       VssDbRecord vssRecord) {
     return dsl.insertInto(VSS_DB)
-        .values(vssRecord.getStoreId(), vssRecord.getKey(),
+        .values(vssRecord.getUserToken(), vssRecord.getStoreId(), vssRecord.getKey(),
             vssRecord.getValue(), 1, vssRecord.getCreatedAt(), vssRecord.getLastUpdatedAt())
         .onDuplicateKeyIgnore();
   }
@@ -175,14 +178,16 @@ public class PostgresBackendImpl implements KVStore {
         .set(Map.of(VSS_DB.VALUE, vssRecord.getValue(),
             VSS_DB.VERSION, vssRecord.getVersion() + 1,
             VSS_DB.LAST_UPDATED_AT, vssRecord.getLastUpdatedAt()))
-        .where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
+        .where(VSS_DB.USER_TOKEN.eq(vssRecord.getUserToken())
+            .and(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
             .and(VSS_DB.KEY.eq(vssRecord.getKey()))
-            .and(VSS_DB.VERSION.eq(vssRecord.getVersion())));
+            .and(VSS_DB.VERSION.eq(vssRecord.getVersion()))));
   }
 
-  private VssDbRecord buildVssRecord(String storeId, KeyValue kv) {
+  private VssDbRecord buildVssRecord(String userToken, String storeId, KeyValue kv) {
     OffsetDateTime today = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.DAYS);
     return new VssDbRecord()
+        .setUserToken(userToken)
         .setStoreId(storeId)
         .setKey(kv.getKey())
         .setValue(kv.getValue().toByteArray())
@@ -192,9 +197,9 @@ public class PostgresBackendImpl implements KVStore {
   }
 
   @Override
-  public DeleteObjectResponse delete(DeleteObjectRequest request) {
+  public DeleteObjectResponse delete(String userToken, DeleteObjectRequest request) {
     String storeId = request.getStoreId();
-    VssDbRecord vssDbRecord = buildVssRecord(storeId, request.getKeyValue());
+    VssDbRecord vssDbRecord = buildVssRecord(userToken, storeId, request.getKeyValue());
 
     context.transaction((ctx) -> {
       DSLContext dsl = ctx.dsl();
@@ -206,7 +211,7 @@ public class PostgresBackendImpl implements KVStore {
   }
 
   @Override
-  public ListKeyVersionsResponse listKeyVersions(ListKeyVersionsRequest request) {
+  public ListKeyVersionsResponse listKeyVersions(String userToken, ListKeyVersionsRequest request) {
     String storeId = request.getStoreId();
     String keyPrefix = request.getKeyPrefix();
     String pageToken = request.getPageToken();
@@ -221,12 +226,13 @@ public class PostgresBackendImpl implements KVStore {
           .setStoreId(storeId)
           .setKey(GLOBAL_VERSION_KEY)
           .build();
-      globalVersion = get(getGlobalVersionRequest).getValue().getVersion();
+      globalVersion = get(userToken, getGlobalVersionRequest).getValue().getVersion();
     }
 
     List<VssDbRecord> vssDbRecords = context.select(VSS_DB.KEY, VSS_DB.VERSION).from(VSS_DB)
-        .where(VSS_DB.STORE_ID.eq(storeId)
-            .and(VSS_DB.KEY.startsWith(keyPrefix)))
+        .where(VSS_DB.USER_TOKEN.eq(userToken)
+            .and(VSS_DB.STORE_ID.eq(storeId)
+            .and(VSS_DB.KEY.startsWith(keyPrefix))))
         .orderBy(VSS_DB.KEY)
         .seek(pageToken)
         .limit(Math.min(pageSize, LIST_KEY_VERSIONS_MAX_PAGE_SIZE))
