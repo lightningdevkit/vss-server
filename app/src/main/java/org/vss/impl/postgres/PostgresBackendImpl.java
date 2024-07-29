@@ -2,6 +2,9 @@ package org.vss.impl.postgres;
 
 import com.google.inject.Inject;
 import com.google.protobuf.ByteString;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -151,36 +154,41 @@ public class PostgresBackendImpl implements KVStore {
   private Query buildNonConditionalUpsertRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
     return dsl.insertInto(VSS_DB)
         .values(vssRecord.getStoreId(), vssRecord.getKey(),
-            vssRecord.getValue(), 1)
+            vssRecord.getValue(), 1, vssRecord.getCreatedAt(), vssRecord.getLastUpdatedAt())
         .onConflict(VSS_DB.STORE_ID, VSS_DB.KEY)
         .doUpdate()
         .set(VSS_DB.VALUE, vssRecord.getValue())
-        .set(VSS_DB.VERSION, 1L);
+        .set(VSS_DB.VERSION, 1L)
+        .set(VSS_DB.LAST_UPDATED_AT, vssRecord.getLastUpdatedAt());
   }
 
   private Insert<VssDbRecord> buildConditionalInsertRecordQuery(DSLContext dsl,
       VssDbRecord vssRecord) {
     return dsl.insertInto(VSS_DB)
         .values(vssRecord.getStoreId(), vssRecord.getKey(),
-            vssRecord.getValue(), 1)
+            vssRecord.getValue(), 1, vssRecord.getCreatedAt(), vssRecord.getLastUpdatedAt())
         .onDuplicateKeyIgnore();
   }
 
   private Update<VssDbRecord> buildConditionalUpdateRecordQuery(DSLContext dsl, VssDbRecord vssRecord) {
     return dsl.update(VSS_DB)
         .set(Map.of(VSS_DB.VALUE, vssRecord.getValue(),
-            VSS_DB.VERSION, vssRecord.getVersion() + 1))
+            VSS_DB.VERSION, vssRecord.getVersion() + 1,
+            VSS_DB.LAST_UPDATED_AT, vssRecord.getLastUpdatedAt()))
         .where(VSS_DB.STORE_ID.eq(vssRecord.getStoreId())
             .and(VSS_DB.KEY.eq(vssRecord.getKey()))
             .and(VSS_DB.VERSION.eq(vssRecord.getVersion())));
   }
 
   private VssDbRecord buildVssRecord(String storeId, KeyValue kv) {
+    OffsetDateTime today = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.DAYS);
     return new VssDbRecord()
         .setStoreId(storeId)
         .setKey(kv.getKey())
         .setValue(kv.getValue().toByteArray())
-        .setVersion(kv.getVersion());
+        .setVersion(kv.getVersion())
+        .setCreatedAt(today)
+        .setLastUpdatedAt(today);
   }
 
   @Override
