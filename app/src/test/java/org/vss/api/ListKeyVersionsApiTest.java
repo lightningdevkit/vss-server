@@ -1,6 +1,7 @@
 package org.vss.api;
 
 import com.google.protobuf.ByteString;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -16,6 +17,8 @@ import org.vss.KVStore;
 import org.vss.KeyValue;
 import org.vss.ListKeyVersionsRequest;
 import org.vss.ListKeyVersionsResponse;
+import org.vss.auth.AuthResponse;
+import org.vss.auth.Authorizer;
 import org.vss.exception.ConflictException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -28,7 +31,10 @@ import static org.mockito.Mockito.when;
 public class ListKeyVersionsApiTest {
   private ListKeyVersionsApi listKeyVersionsApi;
   private KVStore mockKVStore;
+  private Authorizer mockAuthorizer;
+  private HttpHeaders mockHeaders;
 
+  private static String TEST_USER_TOKEN = "userToken";
   private static String TEST_STORE_ID = "storeId";
   private static String TEST_KEY = "key";
   private static KeyValue TEST_KV = KeyValue.newBuilder().setKey(TEST_KEY).setValue(
@@ -37,7 +43,10 @@ public class ListKeyVersionsApiTest {
   @BeforeEach
   void setUp() {
     mockKVStore = mock(KVStore.class);
-    listKeyVersionsApi = new ListKeyVersionsApi(mockKVStore);
+    mockAuthorizer = mock(Authorizer.class);
+    listKeyVersionsApi = new ListKeyVersionsApi(mockKVStore, mockAuthorizer);
+    mockHeaders = mock(HttpHeaders.class);
+    when(mockAuthorizer.verify(any())).thenReturn(new AuthResponse(TEST_USER_TOKEN));
   }
 
   @Test
@@ -50,13 +59,13 @@ public class ListKeyVersionsApiTest {
     byte[] payload = expectedRequest.toByteArray();
     ListKeyVersionsResponse mockResponse = ListKeyVersionsResponse.newBuilder().addAllKeyVersions(
         List.of(TEST_KV)).build();
-    when(mockKVStore.listKeyVersions(expectedRequest)).thenReturn(mockResponse);
+    when(mockKVStore.listKeyVersions(TEST_USER_TOKEN, expectedRequest)).thenReturn(mockResponse);
 
-    Response actualResponse = listKeyVersionsApi.execute(payload);
+    Response actualResponse = listKeyVersionsApi.execute(payload, mockHeaders);
 
     assertThat(actualResponse.getStatus(), is(Response.Status.OK.getStatusCode()));
     assertThat(actualResponse.getEntity(), is(mockResponse.toByteArray()));
-    verify(mockKVStore).listKeyVersions(expectedRequest);
+    verify(mockKVStore).listKeyVersions(TEST_USER_TOKEN, expectedRequest);
   }
 
   @ParameterizedTest
@@ -69,9 +78,9 @@ public class ListKeyVersionsApiTest {
             .setKeyPrefix(TEST_KEY)
             .build();
     byte[] payload = expectedRequest.toByteArray();
-    when(mockKVStore.listKeyVersions(any())).thenThrow(exception);
+    when(mockKVStore.listKeyVersions(any(), any())).thenThrow(exception);
 
-    Response response = listKeyVersionsApi.execute(payload);
+    Response response = listKeyVersionsApi.execute(payload, mockHeaders);
 
     ErrorResponse expectedErrorResponse = ErrorResponse.newBuilder()
         .setErrorCode(errorCode)
@@ -79,7 +88,7 @@ public class ListKeyVersionsApiTest {
         .build();
     assertThat(response.getEntity(), is(expectedErrorResponse.toByteArray()));
     assertThat(response.getStatus(), is(statusCode));
-    verify(mockKVStore).listKeyVersions(expectedRequest);
+    verify(mockKVStore).listKeyVersions(TEST_USER_TOKEN, expectedRequest);
   }
 
   private static Stream<Arguments> provideErrorTestCases() {
