@@ -60,7 +60,7 @@ jobs:
           ./gradlew --version
           ./gradlew build
 
-          docker cp app/build/libs/app-1.0.war tomcat:/usr/local/tomcat/webapps/vss.war
+          docker cp app/build/libs/vss-1.0.war tomcat:/usr/local/tomcat/webapps/vss.war
 
       - name: Hit endpoint to verify service is up
         run: |
