@@ -52,36 +52,46 @@ class HikariCPDataSource {
 
   static {
     try (InputStream input = HikariCPDataSource.class.getClassLoader()
-        .getResourceAsStream("hikariJdbc.properties")) {
-      Properties hikariJdbcProperties = new Properties();
-      hikariJdbcProperties.load(input);
+        .getResourceAsStream("application.properties")) {
+      Properties applicationProperties = new Properties();
+      applicationProperties.load(input);
 
-      config.setJdbcUrl(hikariJdbcProperties.getProperty("jdbc.url"));
-      config.setUsername(hikariJdbcProperties.getProperty("jdbc.username"));
-      config.setPassword(hikariJdbcProperties.getProperty("jdbc.password"));
+      config.setJdbcUrl(getEnvOrConfigProperty("vss.jdbc.url", applicationProperties));
+      config.setUsername(getEnvOrConfigProperty("vss.jdbc.username", applicationProperties));
+      config.setPassword(getEnvOrConfigProperty("vss.jdbc.password", applicationProperties));
 
       config.setMaximumPoolSize(
-          Integer.parseInt(hikariJdbcProperties.getProperty("hikaricp.maxPoolSize")));
+          Integer.parseInt(getEnvOrConfigProperty("vss.hikaricp.maxPoolSize", applicationProperties)));
       config.setMinimumIdle(
-          Integer.parseInt(hikariJdbcProperties.getProperty("hikaricp.minimumIdle")));
+          Integer.parseInt(getEnvOrConfigProperty("vss.hikaricp.minimumIdle", applicationProperties)));
       config.setConnectionTimeout(
-          Long.parseLong(hikariJdbcProperties.getProperty("hikaricp.connectionTimeout")));
+          Long.parseLong(getEnvOrConfigProperty("vss.hikaricp.connectionTimeout", applicationProperties)));
       config.setIdleTimeout(
-          Long.parseLong(hikariJdbcProperties.getProperty("hikaricp.idleTimeout")));
+          Long.parseLong(getEnvOrConfigProperty("vss.hikaricp.idleTimeout", applicationProperties)));
       config.setMaxLifetime(
-          Long.parseLong(hikariJdbcProperties.getProperty("hikaricp.maxLifetime")));
+          Long.parseLong(getEnvOrConfigProperty("vss.hikaricp.maxLifetime", applicationProperties)));
 
       config.addDataSourceProperty("cachePrepStmts",
-          hikariJdbcProperties.getProperty("hikaricp.cachePrepStmts"));
+          getEnvOrConfigProperty("vss.hikaricp.cachePrepStmts", applicationProperties));
       config.addDataSourceProperty("prepStmtCacheSize",
-          hikariJdbcProperties.getProperty("hikaricp.prepStmtCacheSize"));
+          getEnvOrConfigProperty("vss.hikaricp.prepStmtCacheSize", applicationProperties));
       config.addDataSourceProperty("prepStmtCacheSqlLimit",
-          hikariJdbcProperties.getProperty("hikaricp.prepStmtCacheSqlLimit"));
+          getEnvOrConfigProperty("vss.hikaricp.prepStmtCacheSqlLimit", applicationProperties));
 
       dataSource = new HikariDataSource(config);
     } catch (IOException e) {
-      throw new RuntimeException("Unable to read hikariJdbcProperties from resources");
+      throw new RuntimeException("Unable to read application.properties from resources");
     }
+  }
+
+  // Retrieves the value of a specified property, first checking environment variables,
+  // then falling back to provided configuration properties if the environment variable is not set.
+  private static String getEnvOrConfigProperty(String key, Properties hikariJdbcProperties) {
+    String propertyValue = System.getenv(key);
+    if (StringUtils.isBlank(propertyValue)) {
+      propertyValue = hikariJdbcProperties.getProperty(key);
+    }
+    return propertyValue;
   }
 
   private HikariCPDataSource() {
