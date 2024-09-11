@@ -30,6 +30,10 @@ idea {
 group 'org.vss'
 version '1.0'
 
+war {
+  archiveFileName = "vss-${project.version}.war"
+}
+
 dependencies {
   implementation "com.google.protobuf:protobuf-java:$protobufVersion"
 

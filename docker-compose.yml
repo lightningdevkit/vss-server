@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: YOU_MUST_CHANGE_THIS_PASSWORD
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./app/src/main/java/org/vss/impl/postgres/sql/v0_create_vss_db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+
+  tomcat:
+    build:
+      context: .
+    container_name: tomcat
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - app-network
+
+volumes:
+  postgres-data:
+
+networks:
+  app-network:
+    driver: bridge
