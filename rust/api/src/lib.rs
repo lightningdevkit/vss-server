@@ -9,6 +9,8 @@
 #![deny(rustdoc::private_intra_doc_links)]
 #![deny(missing_docs)]
 
+/// Contains interface for authorizer that is run before every request, and its corresponding implementations.
+pub mod auth;
 /// Implements the error type ([`error::VssError`]) which is eventually converted to [`ErrorResponse`] and returned to the client.
 ///
 /// [`ErrorResponse`]: types::ErrorResponse
