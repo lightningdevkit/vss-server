@@ -6,3 +6,11 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.77"
 api = { path = "../api" }
+chrono = "0.4.38"
+tokio-postgres = { version = "0.7.12", features = ["with-chrono-0_4"] }
+bb8-postgres = "0.7"
+bytes = "1.4.0"
+
+[dev-dependencies]
+tokio = { version = "1.38.0", default-features = false, features = ["rt-multi-thread", "macros"] }
+api = { path = "../api", features = ["_test_utils"] }
