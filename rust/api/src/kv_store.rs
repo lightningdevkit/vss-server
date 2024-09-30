@@ -5,8 +5,11 @@ use crate::types::{
 };
 use async_trait::async_trait;
 
-pub(crate) const GLOBAL_VERSION_KEY: &str = "global_version";
-pub(crate) const INITIAL_RECORD_VERSION: i32 = 1;
+/// The key used to store and retrieve the global version of the store.
+pub const GLOBAL_VERSION_KEY: &str = "global_version";
+
+/// The initial version number assigned to newly created records.
+pub const INITIAL_RECORD_VERSION: i32 = 1;
 
 /// An interface that must be implemented by every backend implementation of VSS.
 #[async_trait]

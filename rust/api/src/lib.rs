@@ -21,3 +21,7 @@ pub mod kv_store;
 
 /// Contains request/response types generated from the API definition of VSS.
 pub mod types;
+
+#[cfg(feature = "_test_utils")]
+/// Defines [`kv_store_tests::KvStoreTestSuite`] which is required for an implementation to be VSS protocol compliant.
+pub mod kv_store_tests;
