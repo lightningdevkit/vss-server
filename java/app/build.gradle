@@ -21,6 +21,14 @@ repositories {
   mavenCentral()
 }
 
+sourceSets {
+  main {
+    proto {
+      srcDir '../../proto'
+    }
+  }
+}
+
 idea {
   module {
     generatedSourceDirs.add(file("build/generated/proto/main"))
