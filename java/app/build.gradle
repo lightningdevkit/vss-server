@@ -23,15 +23,13 @@ repositories {
 
 sourceSets {
   main {
+    java {
+      srcDirs += './src/main/generated/proto'
+      srcDirs -= './build/generated'
+    }
     proto {
       srcDir '../../proto'
     }
-  }
-}
-
-idea {
-  module {
-    generatedSourceDirs.add(file("build/generated/proto/main"))
   }
 }
 
@@ -80,6 +78,17 @@ test {
 protobuf {
   protoc {
     artifact = "com.google.protobuf:protoc:$protobufVersion"
+  }
+
+  generatedFilesBaseDir = "${projectDir}/src/"
+  generateProtoTasks {
+    all().each { task ->
+      task.builtins {
+        java {
+          outputSubDir = 'generated/proto'
+        }
+      }
+    }
   }
 }
 
