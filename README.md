@@ -56,6 +56,10 @@ VSS execution is split into two phases: Phase I prioritizes recovery and single-
 multi-device use. Phase I is ready to use and integrated within [LDK-node]. Phase II will be subject to monitoring for
 demand from wallets and may slip to a later date. Refer to [LDK-Roadmap] for more details.
 
+### API
+
+See the [VSS API contract] for details.
+
 ### Implementation
 
 Currently, VSS-server has a Java-based implementation and is ready to use. Support for a Rust-based VSS-server is a work
@@ -106,6 +110,8 @@ burden of implementing complex storage solutions from scratch.
 If you encounter any issues or have questions, feel free to open an issue on
 the [GitHub repository](https://github.com/lightningdevkit/vss-server/issues). For further assistance or to discuss the
 development of VSS, you can reach out to us in the [LDK Discord] in the `#vss` channel.
+
+[VSS API contract]: https://github.com/lightningdevkit/vss-server/blob/main/proto/vss.proto
 
 [VSS-rust-client]: https://github.com/lightningdevkit/vss-rust-client
 
