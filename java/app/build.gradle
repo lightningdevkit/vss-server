@@ -23,15 +23,14 @@ repositories {
 
 sourceSets {
   main {
+    java {
+      srcDirs += './src/main/generated/proto'
+      srcDirs += './src/main/generated/jooq'
+      srcDirs -= './build/generated'
+    }
     proto {
       srcDir '../../proto'
     }
-  }
-}
-
-idea {
-  module {
-    generatedSourceDirs.add(file("build/generated/proto/main"))
   }
 }
 
@@ -81,12 +80,23 @@ protobuf {
   protoc {
     artifact = "com.google.protobuf:protoc:$protobufVersion"
   }
+
+  generatedFilesBaseDir = "${projectDir}/src/"
+  generateProtoTasks {
+    all().each { task ->
+      task.builtins {
+        java {
+          outputSubDir = 'generated/proto'
+        }
+      }
+    }
+  }
 }
 
 jooq {
   configurations {
     main {
-      generateSchemaSourceOnCompilation = true
+      generateSchemaSourceOnCompilation = false
 
       generationTool {
         jdbc {
@@ -115,7 +125,7 @@ jooq {
           }
           target {
             packageName = 'org.vss.postgres'
-            directory = 'build/generated-src/jooq/main'
+            directory = 'src/main/generated/jooq'
           }
           strategy.name = 'org.jooq.codegen.DefaultGeneratorStrategy'
         }
