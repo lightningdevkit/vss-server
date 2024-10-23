@@ -25,6 +25,7 @@ sourceSets {
   main {
     java {
       srcDirs += './src/main/generated/proto'
+      srcDirs += './src/main/generated/jooq'
       srcDirs -= './build/generated'
     }
     proto {
@@ -95,7 +96,7 @@ protobuf {
 jooq {
   configurations {
     main {
-      generateSchemaSourceOnCompilation = true
+      generateSchemaSourceOnCompilation = false
 
       generationTool {
         jdbc {
@@ -124,7 +125,7 @@ jooq {
           }
           target {
             packageName = 'org.vss.postgres'
-            directory = 'build/generated-src/jooq/main'
+            directory = 'src/main/generated/jooq'
           }
           strategy.name = 'org.jooq.codegen.DefaultGeneratorStrategy'
         }
