@@ -56,12 +56,28 @@ VSS execution is split into two phases: Phase I prioritizes recovery and single-
 multi-device use. Phase I is ready to use and integrated within [LDK-node]. Phase II will be subject to monitoring for
 demand from wallets and may slip to a later date. Refer to [LDK-Roadmap] for more details.
 
+### Implementation
+
+Currently, VSS-server has a Java-based implementation and is ready to use. Support for a Rust-based VSS-server is a work
+in progress.
+[VSS-rust-client] is a Rust-based client with support for client-side encryption, key obfuscation, retry mechanisms, and
+LNURL-auth.
+VSS is also integrated with [LDK-node] v0.4.x as alpha support.
+
 ### Summary
 
 In summary, VSS is an open-source project that offers a server-side cloud storage solution for non-custodial Lightning
 wallets. It provides multi-device access, recovery capabilities, and various features to ensure user privacy and data
 verifiability. By leveraging VSS, wallet developers can focus on building innovative Lightning wallets without the
 burden of implementing complex storage solutions from scratch.
+
+### Support
+
+If you encounter any issues or have questions, feel free to open an issue on
+the [GitHub repository](https://github.com/lightningdevkit/vss-server/issues). For further assistance or to discuss the
+development of VSS, you can reach out to us in the [LDK Discord] in the `#vss` channel.
+
+[VSS-rust-client]: https://github.com/lightningdevkit/vss-rust-client
 
 [LDK-node]: https://github.com/lightningdevkit/ldk-node
 
