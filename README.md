@@ -50,14 +50,11 @@ effortlessly switch between different instances of VSS.
 VSS ships with a PostgreSQL implementation by default and can be hosted in your favorite infrastructure/cloud provider (
 AWS/GCP) and its backend storage can be switched with some other implementation for KeyValueStore if needed.
 
-### Project Execution
+### Project Status
 
-To explore the detailed API contract of VSS, you can refer to
-the [VSS API contract](https://github.com/lightningdevkit/vss-server/blob/main/app/src/main/proto/vss.proto) and can
-track project progress [here](https://github.com/lightningdevkit/vss-server/issues/9). VSS execution is split into two
-phases, phase-I prioritizes recovery and single-device use, whereas phase-II covers multi-device use. The first phase is
-expected to be released in Q2 2023. The second phase will be subject to monitoring for demand from wallets and may slip
-to 2024. [[LDK-Roadmap](https://lightningdevkit.org/blog/ldk-roadmap/#vss)]
+VSS execution is split into two phases: Phase I prioritizes recovery and single-device use, whereas Phase II covers
+multi-device use. Phase I is ready to use and integrated within [LDK-node]. Phase II will be subject to monitoring for
+demand from wallets and may slip to a later date. Refer to [LDK-Roadmap] for more details.
 
 ### Summary
 
@@ -66,3 +63,6 @@ wallets. It provides multi-device access, recovery capabilities, and various fea
 verifiability. By leveraging VSS, wallet developers can focus on building innovative Lightning wallets without the
 burden of implementing complex storage solutions from scratch.
 
+[LDK-node]: https://github.com/lightningdevkit/ldk-node
+
+[LDK-Roadmap]: https://lightningdevkit.org/blog/ldk-roadmap/#vss
