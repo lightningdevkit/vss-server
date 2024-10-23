@@ -64,6 +64,36 @@ in progress.
 LNURL-auth.
 VSS is also integrated with [LDK-node] v0.4.x as alpha support.
 
+### Development
+
+* **Build & Deploy**: Refer to language specific folder for instructions related to build and deploy of VSS.
+* **Hosting**: VSS can either be self-hosted or deployed in the cloud. If a service provider is hosting VSS for multiple
+  users, it must be configured with **HTTPS**, **Authentication/Authorization**, and **rate-limiting**.
+* **Authentication and Authorization**: Currently, the VSS-server
+  supports [JWT](https://datatracker.ietf.org/doc/html/rfc7519)-based authentication and authorization, and can run
+  without authentication for local testing or in trusted setups. The VSS-rust-client supports LNURL-auth & JWT based
+  authentication and authorization. Switching to simple HTTP header authentication is straightforward by adding another
+  implementation. Note that the security of authentication heavily relies on using HTTPS for all requests.
+* **Scaling**: VSS itself is stateless and can be horizontally scaled easily. VSS can be configured to point to a
+  PostgreSQL cluster, and further scaling considerations need to be addressed in the PostgreSQL cluster.
+* **Using with LDK-node**: [LDK-node] can be easily configured to run with VSS as primary storage. It is integrated in
+  LDK-node (written in Rust) using [VSS-rust-client], and there is also support for other languages such as Swift,
+  Kotlin and Python through [UniFFI] bindings.
+    ```rust
+    use ldk_node::Builder;
+    fn main() {
+    let mut node_builder = Builder::new();
+    ...
+    let node = node_builder.build_with_vss_store_and_fixed_headers(vss_endpoint, store_id, HashMap::new()).unwrap();
+    node.start().unwrap();
+    ...
+    ...
+    }
+    ```
+* **Using with Other Applications**: VSS is designed to store application-related metadata. Clients can use
+  the [VSS-rust-client] directly for this purpose. This can help provide a complete user data recovery solution for
+  applications, as well as enable turn-key multi-device support in the future.
+
 ### Summary
 
 In summary, VSS is an open-source project that offers a server-side cloud storage solution for non-custodial Lightning
@@ -82,3 +112,7 @@ development of VSS, you can reach out to us in the [LDK Discord] in the `#vss` c
 [LDK-node]: https://github.com/lightningdevkit/ldk-node
 
 [LDK-Roadmap]: https://lightningdevkit.org/blog/ldk-roadmap/#vss
+
+[LDK Discord]: https://discord.gg/5AcknnMfBw
+
+[UniFFI]: https://mozilla.github.io/uniffi-rs/
