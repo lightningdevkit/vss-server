@@ -51,7 +51,7 @@ gradle wrapper --gradle-version 8.1.1
 2. Create table in PostgreSQL using `./app/src/main/java/org/vss/impl/postgres/sql/`
 3. **Build the Docker Image**:
     ```
-        docker build --tag 'vss_server_java'
+        docker build . --tag 'vss_server_java'
     ```
 3. **Run the Docker Container**:
     ```
