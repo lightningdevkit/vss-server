@@ -9,6 +9,11 @@ This directory hosts the Java-based implementation of the Versioned Storage Serv
 - Install Docker (https://docs.docker.com/desktop/).
 - Install PostgreSQL 15 (https://www.postgresql.org/download/).
 
+
+### Installation without docker
+
+see [here](./INSTALL.md)
+
 ### Building
 
 ```
@@ -46,7 +51,7 @@ gradle wrapper --gradle-version 8.1.1
 
 #### To run just the VSS-server:
 
-1. **Edit Configuration**: Modify the Dockerfile or application.properties to set application configurations and
+1. **Edit Configuration**: Modify the Dockerfile or `./app/src/main/resources/application.properties` to set application configurations and
    environment variables as needed. Add PostgreSQL endpoint configuration.
 2. Create table in PostgreSQL using `./app/src/main/java/org/vss/impl/postgres/sql/`
 3. **Build the Docker Image**:
