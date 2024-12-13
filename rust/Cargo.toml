@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["server", "api", "impls"]
+members = ["server", "api", "impls", "auth-impls"]
 default-members = ["server"]
 
 [profile.release]

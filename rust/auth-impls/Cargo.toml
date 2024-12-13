@@ -1,0 +1,13 @@
+[package]
+name = "auth-impls"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1.77"
+api = { path = "../api" }
+jsonwebtoken = { version = "9.3.0", default-features = false, features = ["use_pem"] }
+serde = { version = "1.0.210", features = ["derive"] }
+
+[dev-dependencies]
+tokio = { version = "1.38.0", default-features = false, features = ["rt-multi-thread", "macros"] }
