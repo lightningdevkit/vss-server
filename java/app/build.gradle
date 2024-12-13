@@ -1,6 +1,6 @@
 buildscript {
   ext.protobufPlugInVersion = '0.9.4'
-  ext.protobufVersion = '3.21.7'
+  ext.protobufVersion = '3.25.5'
   ext.jerseyVersion = '3.1.0'
   ext.junitVersion = '5.9.0'
   ext.mockitoVersion = '5.2.0'
