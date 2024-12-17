@@ -30,6 +30,8 @@ impl VssService {
 	}
 }
 
+const BASE_PATH_PREFIX: &str = "/vss";
+
 impl Service<Request<Incoming>> for VssService {
 	type Response = Response<Full<Bytes>>;
 	type Error = hyper::Error;
@@ -39,8 +41,11 @@ impl Service<Request<Incoming>> for VssService {
 		let store = Arc::clone(&self.store);
 		let authorizer = Arc::clone(&self.authorizer);
 		let path = req.uri().path().to_owned();
+
 		Box::pin(async move {
-			match path.as_str() {
+			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or("");
+
+			match prefix_stripped_path {
 				"/getObject" => {
 					handle_request(store, authorizer, req, handle_get_object_request).await
 				},
@@ -54,10 +59,10 @@ impl Service<Request<Incoming>> for VssService {
 					handle_request(store, authorizer, req, handle_list_object_request).await
 				},
 				_ => {
-					let error = format!("Unknown request: {}", path).into_bytes();
+					let error_msg = "Invalid request path.".as_bytes();
 					Ok(Response::builder()
 						.status(StatusCode::BAD_REQUEST)
-						.body(Full::new(Bytes::from(error)))
+						.body(Full::new(Bytes::from(error_msg)))
 						.unwrap())
 				},
 			}
