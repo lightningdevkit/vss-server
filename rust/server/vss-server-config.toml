@@ -1,0 +1,10 @@
+[server_config]
+host = "127.0.0.1"
+port = 8080
+
+[postgresql_config]
+username = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_USERNAME`
+password = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_PASSWORD`
+host = "localhost"
+port = 5432
+database = "postgres"

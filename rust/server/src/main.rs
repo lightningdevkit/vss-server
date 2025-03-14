@@ -23,11 +23,32 @@ use api::kv_store::KvStore;
 use impls::postgres_store::PostgresBackendImpl;
 use std::sync::Arc;
 
+pub(crate) mod util;
 pub(crate) mod vss_service;
 
 fn main() {
-	// Define the address to bind the server to
-	let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+	let args: Vec<String> = std::env::args().collect();
+	if args.len() != 2 {
+		eprintln!("Usage: {} <config-file-path>", args[0]);
+		std::process::exit(1);
+	}
+
+	let config = match util::config::load_config(&args[1]) {
+		Ok(cfg) => cfg,
+		Err(e) => {
+			eprintln!("Failed to load configuration: {}", e);
+			std::process::exit(1);
+		},
+	};
+
+	let addr: SocketAddr =
+		match format!("{}:{}", config.server_config.host, config.server_config.port).parse() {
+			Ok(addr) => addr,
+			Err(e) => {
+				eprintln!("Invalid host/port configuration: {}", e);
+				std::process::exit(1);
+			},
+		};
 
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
@@ -47,7 +68,7 @@ fn main() {
 		};
 		let authorizer = Arc::new(NoopAuthorizer {});
 		let store = Arc::new(
-			PostgresBackendImpl::new("postgresql://postgres:postgres@localhost:5432/postgres")
+			PostgresBackendImpl::new(&config.postgresql_config.expect("PostgreSQLConfig must be defined in config file.").to_connection_string())
 				.await
 				.unwrap(),
 		);
