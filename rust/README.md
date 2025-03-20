@@ -17,18 +17,18 @@ cargo build --release
 ```
 
 ### Running
-1. **Edit Configuration**: Modify `./vss_server_config.toml` to set application configuration and
+1. **Edit Configuration**: Modify `./server/vss-server-config.toml` to set application configuration and
    environment variables as needed. Add PostgreSQL endpoint configuration.
 2. Create table in PostgreSQL using `./impls/src/postgres/sql/`
 3. Start server:
     ```
-        cargo run -- vss-server-config.toml
+        cargo run -- server/vss-server-config.toml
     ```
 3. VSS endpoint should be reachable at `http://localhost:8080/vss`.
 
 ### Configuration
 
-Refer `./vss_server_config.toml` to see available configuration options.
+Refer `./server/vss-server-config.toml` to see available configuration options.
 
 ### Support
 
