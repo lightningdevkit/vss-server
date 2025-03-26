@@ -376,8 +376,8 @@ impl KvStore for PostgresBackendImpl {
 
 		let stmt = "SELECT key, version FROM vss_db WHERE user_token = $1 AND store_id = $2 AND key > $3 AND key LIKE $4 ORDER BY key LIMIT $5";
 
-		let key_like = format!("{}%", key_prefix.as_deref().unwrap_or(""));
-		let page_token_param = page_token.as_deref().unwrap_or("");
+		let key_like = format!("{}%", key_prefix.as_deref().unwrap_or_default());
+		let page_token_param = page_token.as_deref().unwrap_or_default();
 		let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
 			vec![&user_token, &store_id, &page_token_param, &key_like, &limit];
 
