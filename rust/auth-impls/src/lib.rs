@@ -42,16 +42,8 @@ const BEARER_PREFIX: &str = "Bearer ";
 
 impl JWTAuthorizer {
 	/// Create new instance of [`JWTAuthorizer`]
-	pub async fn new(jwt_issuer_key: DecodingKey) -> JWTAuthorizer {
-		JWTAuthorizer { jwt_issuer_key }
-	}
-
-	fn extract_token(auth_header: &str) -> Option<&str> {
-		if auth_header.starts_with(BEARER_PREFIX) {
-			Some(&auth_header[BEARER_PREFIX.len()..])
-		} else {
-			None
-		}
+	pub async fn new(jwt_issuer_key: DecodingKey) -> Self {
+		Self { jwt_issuer_key }
 	}
 }
 
@@ -64,7 +56,8 @@ impl Authorizer for JWTAuthorizer {
 			.get("Authorization")
 			.ok_or(VssError::AuthError("Authorization header not found.".to_string()))?;
 
-		let token = JWTAuthorizer::extract_token(auth_header)
+		let token = auth_header
+			.strip_prefix(BEARER_PREFIX)
 			.ok_or(VssError::AuthError("Invalid token format.".to_string()))?;
 
 		let claims =

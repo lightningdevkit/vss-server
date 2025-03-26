@@ -43,7 +43,7 @@ impl Service<Request<Incoming>> for VssService {
 		let path = req.uri().path().to_owned();
 
 		Box::pin(async move {
-			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or("");
+			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
 				"/getObject" => {
@@ -103,7 +103,7 @@ async fn handle_request<
 	let headers_map = parts
 		.headers
 		.iter()
-		.map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+		.map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or_default().to_string()))
 		.collect::<HashMap<String, String>>();
 
 	let user_token = match authorizer.verify(&headers_map).await {
