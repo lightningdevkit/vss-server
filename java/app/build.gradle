@@ -5,7 +5,7 @@ buildscript {
   ext.junitVersion = '5.9.0'
   ext.mockitoVersion = '5.2.0'
   ext.postgresVersion = '42.5.1'
-  ext.jooqVersion = '3.17.7'
+  ext.jooqVersion = '3.19.1'
   ext.guiceVersion = '5.1.0'
 }
 
@@ -14,7 +14,7 @@ plugins {
   id 'com.google.protobuf' version "${protobufPlugInVersion}"
   id 'war'
   id 'idea'
-  id 'nu.studer.jooq' version '8.0'
+  id 'nu.studer.jooq' version '8.2.2'
 }
 
 repositories {
@@ -69,6 +69,7 @@ dependencies {
   testImplementation "org.junit.jupiter:junit-jupiter-params:$junitVersion"
   testImplementation "org.mockito:mockito-core:$mockitoVersion"
   testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitVersion"
+  testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.9.0"
   testImplementation "org.hamcrest:hamcrest-library:2.2"
   testImplementation "org.testcontainers:junit-jupiter:1.17.6"
   testImplementation "org.testcontainers:postgresql:1.17.6"

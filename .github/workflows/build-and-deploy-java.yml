@@ -54,10 +54,15 @@ jobs:
         run: |
           # Print Info
           java -version
-          gradle --version
+          GRADLE_VERSION=$(gradle --version | awk '/^Gradle/ {print $2}' | head -1)
+          if [ -z "$GRADLE_VERSION" ]; then
+            echo "Failed to extract Gradle version, using default"
+            GRADLE_VERSION="9.0"
+          fi
+          echo "Gradle $GRADLE_VERSION"
 
           cd java
-          gradle wrapper --gradle-version 8.1.1
+          gradle wrapper --gradle-version $GRADLE_VERSION
           ./gradlew --version
           ./gradlew build
 
