@@ -24,7 +24,7 @@ anyone as a Versioned Storage Service. It offers two core functionalities:
   <img src="http://www.plantuml.com/plantuml/png/VP2nJWCn44HxVyMKK4JqAQ8W8aGHA33GBxuXP-7p7lRUeVmzAz60X6YcsQTvezrtasRBL89bAyHBZBZBfn57hYmuY0bkYtw6SA-lkV30DITkTd1mY-l5HbRBIInhnIC_5dOBVjliVl9RT9ru8Ou_wJlhPGX5TSQRDhYddJ7BUV8cT8-hniIySlZJ-JmFOiJn0JUZrCg2Q6BybaRJ9YVwCjCff_zWUE7lZN59YRq7rY7iFVmhNm00" />
 </p>
 
-Clients can also use VSS for general metadata storage as well such as payment history, user metadata etc.
+Clients can also use VSS for general metadata storage such as payment history, user metadata, etc.
 
 ### Motivation
 
@@ -37,18 +37,18 @@ data-integrity mechanisms. It even allows for the disabling of versioning altoge
 making it simple to get started.
 
 The project's design decisions prioritize features such as multi-device access, user privacy through client-side
-encryption(e.g. using key derived from bitcoin wallet), authorization mechanisms, data and version number verifiability,
+encryption (e.g. using key derived from bitcoin wallet), authorization mechanisms, data and version number verifiability,
 and modularity for seamless integration with different backend technologies.
 
 ### Modularity
 
-VSS can work out-of-box with minor configuration but is intended to be forked and customized based on the specific needs
+VSS can work out-of-the-box with minor configuration but is intended to be forked and customized based on the specific needs
 of wallet developers. This customization may include implementing custom authorization, encryption, or backend database
 integration with different cloud providers. As long as the API contract is implemented correctly, wallets can
 effortlessly switch between different instances of VSS.
 
-VSS ships with a PostgreSQL implementation by default and can be hosted in your favorite infrastructure/cloud provider (
-AWS/GCP) and its backend storage can be switched with some other implementation for KeyValueStore if needed.
+VSS ships with a PostgreSQL implementation by default and can be hosted in your favorite infrastructure/cloud provider
+(AWS/GCP) and its backend storage can be switched with some other implementation for KeyValueStore if needed.
 
 ### Project Status
 
@@ -70,7 +70,7 @@ VSS is also integrated with [LDK-node] v0.4.x as alpha support.
 
 ### Development
 
-* **Build & Deploy**: Refer to language specific folder for instructions related to build and deploy of VSS.
+* **Build & Deploy**: Refer to language-specific folder for instructions related to building and deploying VSS.
 * **Hosting**: VSS can either be self-hosted or deployed in the cloud. If a service provider is hosting VSS for multiple
   users, it must be configured with **HTTPS**, **Authentication/Authorization**, and **rate-limiting**.
 * **Authentication and Authorization**: Currently, the VSS-server
@@ -86,12 +86,11 @@ VSS is also integrated with [LDK-node] v0.4.x as alpha support.
     ```rust
     use ldk_node::Builder;
     fn main() {
-    let mut node_builder = Builder::new();
-    ...
-    let node = node_builder.build_with_vss_store_and_fixed_headers(vss_endpoint, store_id, HashMap::new()).unwrap();
-    node.start().unwrap();
-    ...
-    ...
+        let mut node_builder = Builder::new();
+        ...
+        let node = node_builder.build_with_vss_store_and_fixed_headers(vss_endpoint, store_id, HashMap::new()).unwrap();
+        node.start().unwrap();
+        ...
     }
     ```
 * **Using with Other Applications**: VSS is designed to store application-related metadata. Clients can use
