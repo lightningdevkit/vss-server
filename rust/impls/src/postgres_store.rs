@@ -12,7 +12,7 @@ use chrono::Utc;
 use std::cmp::min;
 use std::io;
 use std::io::{Error, ErrorKind};
-use tokio_postgres::{NoTls, Transaction};
+use tokio_postgres::{error, NoTls, Transaction};
 
 pub(crate) struct VssDbRecord {
 	pub(crate) user_token: String,
@@ -26,6 +26,38 @@ pub(crate) struct VssDbRecord {
 const KEY_COLUMN: &str = "key";
 const VALUE_COLUMN: &str = "value";
 const VERSION_COLUMN: &str = "version";
+
+const DB_VERSION_COLUMN: &str = "db_version";
+
+const CHECK_DB_STMT: &str = "SELECT 1 FROM pg_database WHERE datname = $1";
+const INIT_DB_CMD: &str = "CREATE DATABASE";
+const GET_VERSION_STMT: &str = "SELECT db_version FROM vss_db_version;";
+const UPDATE_VERSION_STMT: &str = "UPDATE vss_db_version SET db_version=$1;";
+const LOG_MIGRATION_STMT: &str = "INSERT INTO vss_db_upgrades VALUES($1);";
+
+// APPEND-ONLY list of migration statements
+//
+// Each statement MUST be applied in-order, and only once per database.
+//
+// We make an exception for the vss_db table creation statement, as users of VSS could have initialized the table
+// themselves.
+const MIGRATIONS: &[&str] = &[
+	"CREATE TABLE vss_db_version (db_version INTEGER);",
+	"INSERT INTO vss_db_version VALUES(1);",
+	// A write-only log of all the migrations performed on this database, useful for debugging and testing
+	"CREATE TABLE vss_db_upgrades (upgrade_from INTEGER);",
+	// We do not complain if the table already exists, as users of VSS could have already created this table
+	"CREATE TABLE IF NOT EXISTS vss_db (
+	    user_token character varying(120) NOT NULL CHECK (user_token <> ''),
+	    store_id character varying(120) NOT NULL CHECK (store_id <> ''),
+	    key character varying(600) NOT NULL,
+	    value bytea NULL,
+	    version bigint NOT NULL,
+	    created_at TIMESTAMP WITH TIME ZONE,
+	    last_updated_at TIMESTAMP WITH TIME ZONE,
+	    PRIMARY KEY (user_token, store_id, key)
+	);",
+];
 
 /// The maximum number of key versions that can be returned in a single page.
 ///
@@ -46,17 +78,149 @@ pub struct PostgresBackendImpl {
 	pool: Pool<PostgresConnectionManager<NoTls>>,
 }
 
+async fn initialize_vss_database(postgres_endpoint: &str, db_name: &str) -> Result<(), Error> {
+	let postgres_dsn = format!("{}/{}", postgres_endpoint, "postgres");
+	let (client, connection) = tokio_postgres::connect(&postgres_dsn, NoTls)
+		.await
+		.map_err(|e| Error::new(ErrorKind::Other, format!("Connection error: {}", e)))?;
+	// Connection must be driven on a separate task, and will resolve when the client is dropped
+	tokio::spawn(async move {
+		if let Err(e) = connection.await {
+			eprintln!("Connection error: {}", e);
+		}
+	});
+
+	let num_rows = client.execute(CHECK_DB_STMT, &[&db_name]).await.map_err(|e| {
+		Error::new(
+			ErrorKind::Other,
+			format!("Failed to check presence of database {}: {}", db_name, e),
+		)
+	})?;
+
+	if num_rows == 0 {
+		let stmt = format!("{} {};", INIT_DB_CMD, db_name);
+		client.execute(&stmt, &[]).await.map_err(|e| {
+			Error::new(ErrorKind::Other, format!("Failed to create database {}: {}", db_name, e))
+		})?;
+		println!("Created database {}", db_name);
+	}
+
+	Ok(())
+}
+
 impl PostgresBackendImpl {
 	/// Constructs a [`PostgresBackendImpl`] using `dsn` for PostgreSQL connection information.
-	pub async fn new(dsn: &str) -> Result<Self, Error> {
-		let manager = PostgresConnectionManager::new_from_stringlike(dsn, NoTls).map_err(|e| {
-			Error::new(ErrorKind::Other, format!("Connection manager error: {}", e))
-		})?;
+	pub async fn new(postgres_endpoint: &str, db_name: &str) -> Result<Self, Error> {
+		initialize_vss_database(postgres_endpoint, db_name).await?;
+
+		let vss_dsn = format!("{}/{}", postgres_endpoint, db_name);
+		let manager =
+			PostgresConnectionManager::new_from_stringlike(vss_dsn, NoTls).map_err(|e| {
+				Error::new(
+					ErrorKind::Other,
+					format!("Failed to create PostgresConnectionManager: {}", e),
+				)
+			})?;
+		// By default, Pool maintains 0 long-running connections, so returning a pool
+		// here is no guarantee that Pool established a connection to the database.
+		//
+		// See Builder::min_idle to increase the long-running connection count.
 		let pool = Pool::builder()
 			.build(manager)
 			.await
-			.map_err(|e| Error::new(ErrorKind::Other, format!("Pool build error: {}", e)))?;
-		Ok(PostgresBackendImpl { pool })
+			.map_err(|e| Error::new(ErrorKind::Other, format!("Failed to build Pool: {}", e)))?;
+		let postgres_backend = PostgresBackendImpl { pool };
+
+		postgres_backend.migrate_vss_database().await?;
+
+		Ok(postgres_backend)
+	}
+
+	async fn migrate_vss_database(&self) -> Result<(), Error> {
+		let mut conn = self.pool.get().await.map_err(|e| {
+			Error::new(
+				ErrorKind::Other,
+				format!("Failed to fetch a connection from Pool: {}", e),
+			)
+		})?;
+
+		// Get the next migration to be applied.
+		let migration_start = match conn.query_one(GET_VERSION_STMT, &[]).await {
+			Ok(row) => {
+				let i: i32 = row.get(DB_VERSION_COLUMN);
+				usize::try_from(i).expect("The column should always contain unsigned integers")
+			},
+			Err(e) => {
+				// If the table is not defined, start at migration 0
+				if let Some(&error::SqlState::UNDEFINED_TABLE) = e.code() {
+					0
+				} else {
+					return Err(Error::new(
+						ErrorKind::Other,
+						format!("Failed to query the version of the database schema: {}", e),
+					));
+				}
+			},
+		};
+
+		let tx = conn
+			.transaction()
+			.await
+			.map_err(|e| Error::new(ErrorKind::Other, format!("Transaction start error: {}", e)))?;
+
+		if migration_start == MIGRATIONS.len() {
+			// No migrations needed, we are done
+			return Ok(());
+		} else if migration_start > MIGRATIONS.len() {
+			panic!("We do not allow downgrades");
+		}
+
+		println!("Applying migration(s) {} through {}", migration_start, MIGRATIONS.len() - 1);
+
+		for (idx, &stmt) in (&MIGRATIONS[migration_start..]).iter().enumerate() {
+			let _num_rows = tx.execute(stmt, &[]).await.map_err(|e| {
+				Error::new(
+					ErrorKind::Other,
+					format!(
+						"Database migration no {} with stmt {} failed: {}",
+						migration_start + idx,
+						stmt,
+						e
+					),
+				)
+			})?;
+		}
+
+		let num_rows = tx
+			.execute(
+				LOG_MIGRATION_STMT,
+				&[&i32::try_from(migration_start).expect("Read from an i32 further above")],
+			)
+			.await
+			.map_err(|e| {
+				Error::new(ErrorKind::Other, format!("Failed to log database migration: {}", e))
+			})?;
+		assert_eq!(num_rows, 1, "LOG_MIGRATION_STMT should only add one row at a time");
+
+		let next_migration_start =
+			i32::try_from(MIGRATIONS.len()).expect("Length is definitely smaller than i32::MAX");
+		let num_rows =
+			tx.execute(UPDATE_VERSION_STMT, &[&next_migration_start]).await.map_err(|e| {
+				Error::new(
+					ErrorKind::Other,
+					format!("Failed to update the version of the schema: {}", e),
+				)
+			})?;
+		assert_eq!(
+			num_rows, 1,
+			"UPDATE_VERSION_STMT should only update the unique row in the version table"
+		);
+
+		tx.commit().await.map_err(|e| {
+			Error::new(ErrorKind::Other, format!("Transaction commit error: {}", e))
+		})?;
+
+		Ok(())
 	}
 
 	fn build_vss_record(&self, user_token: String, store_id: String, kv: KeyValue) -> VssDbRecord {
@@ -413,7 +577,7 @@ mod tests {
 	define_kv_store_tests!(
 		PostgresKvStoreTest,
 		PostgresBackendImpl,
-		PostgresBackendImpl::new("postgresql://postgres:postgres@localhost:5432/postgres")
+		PostgresBackendImpl::new("postgresql://postgres:postgres@localhost:5432", "postgres")
 			.await
 			.unwrap()
 	);
