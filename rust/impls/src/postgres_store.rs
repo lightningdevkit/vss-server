@@ -573,12 +573,24 @@ impl KvStore for PostgresBackendImpl {
 mod tests {
 	use crate::postgres_store::PostgresBackendImpl;
 	use api::define_kv_store_tests;
+	use tokio::sync::OnceCell;
 
-	define_kv_store_tests!(
-		PostgresKvStoreTest,
-		PostgresBackendImpl,
+	static START: OnceCell<()> = OnceCell::const_new();
+
+	define_kv_store_tests!(PostgresKvStoreTest, PostgresBackendImpl, {
+		START
+			.get_or_init(|| async {
+				// Initialize the database once, and have other threads wait
+				PostgresBackendImpl::new(
+					"postgresql://postgres:postgres@localhost:5432",
+					"postgres",
+				)
+				.await
+				.unwrap();
+			})
+			.await;
 		PostgresBackendImpl::new("postgresql://postgres:postgres@localhost:5432", "postgres")
 			.await
 			.unwrap()
-	);
+	});
 }
