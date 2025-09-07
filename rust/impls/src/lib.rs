@@ -11,6 +11,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 #![deny(missing_docs)]
 
+mod migrations;
 /// Contains [PostgreSQL](https://www.postgresql.org/) based backend implementation for VSS.
 pub mod postgres_store;
 
