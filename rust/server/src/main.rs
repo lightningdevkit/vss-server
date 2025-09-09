@@ -67,13 +67,18 @@ fn main() {
 			},
 		};
 		let authorizer = Arc::new(NoopAuthorizer {});
+		let postgresql_config = config.postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
+		let endpoint = postgresql_config.to_postgresql_endpoint();
+		let db_name = postgresql_config.database;
 		let store = Arc::new(
-			PostgresBackendImpl::new(&config.postgresql_config.expect("PostgreSQLConfig must be defined in config file.").to_connection_string())
+			PostgresBackendImpl::new(&endpoint, &db_name)
 				.await
 				.unwrap(),
 		);
+		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
 		let rest_svc_listener =
 			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
+		println!("Listening for incoming connections on {}", addr);
 		loop {
 			tokio::select! {
 				res = rest_svc_listener.accept() => {
