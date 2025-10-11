@@ -1,3 +1,6 @@
+> [!CAUTION]
+> The Java-based implementation of VSS-server is now **deprecated**; please use the Rust-based VSS-server implementation instead.
+
 #  Installation guide without docker
 
 ## Ubuntu
