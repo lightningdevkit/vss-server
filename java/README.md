@@ -1,3 +1,6 @@
+> [!CAUTION]
+> The Java-based implementation of VSS-server is now **deprecated**; please use the Rust-based VSS-server implementation instead.
+
 # Versioned Storage Service (Java)
 
 This directory hosts the Java-based implementation of the Versioned Storage Service (VSS).

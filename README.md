@@ -62,7 +62,10 @@ See the [VSS API contract] for details.
 
 ### Implementation
 
-Currently, VSS-server has a Java-based implementation and is ready to use. Support for a Rust-based VSS-server is a work
+> [!CAUTION]
+> The Java-based implementation of VSS-server is now **deprecated**; please use the Rust-based VSS-server implementation instead.
+
+Currently, VSS-server has a deprecated Java-based implementation. Support for a Rust-based VSS-server is a work
 in progress.
 [VSS-rust-client] is a Rust-based client with support for client-side encryption, key obfuscation, retry mechanisms, and
 LNURL-auth.
