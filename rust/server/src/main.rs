@@ -21,6 +21,8 @@ use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
 use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
+use impls::in_memory_store::InMemoryBackendImpl;
+use impls::postgres_store::PostgresBackendImpl;
 use std::sync::Arc;
 
 pub(crate) mod util;
@@ -28,18 +30,27 @@ pub(crate) mod vss_service;
 
 fn main() {
 	let args: Vec<String> = std::env::args().collect();
-	if args.len() != 2 {
-		eprintln!("Usage: {} <config-file-path>", args[0]);
+	if args.len() < 2 {
+		eprintln!("Usage: {} <config-file-path> [--in-memory]", args[0]);
 		std::process::exit(1);
 	}
 
-	let config = match util::config::load_config(&args[1]) {
+	let config_path = &args[1];
+	let use_in_memory = args.contains(&"--in-memory".to_string());
+
+	let mut config = match util::config::load_config(config_path) {
 		Ok(cfg) => cfg,
 		Err(e) => {
 			eprintln!("Failed to load configuration: {}", e);
 			std::process::exit(1);
 		},
 	};
+
+	// Override the `store_type` if --in-memory flag passed
+	if use_in_memory {
+		println!("Overriding backend type: using in-memory backend (via --in-memory flag)");
+		config.server_config.store_type = "in_memory".to_string();
+	}
 
 	let addr: SocketAddr =
 		match format!("{}:{}", config.server_config.host, config.server_config.port).parse() {

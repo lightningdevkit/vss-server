@@ -11,6 +11,8 @@
 #![deny(rustdoc::private_intra_doc_links)]
 #![deny(missing_docs)]
 
+/// Contains in-memory backend implementation for VSS, for testing purposes only.
+pub mod in_memory_store;
 mod migrations;
 /// Contains [PostgreSQL](https://www.postgresql.org/) based backend implementation for VSS.
 pub mod postgres_store;
