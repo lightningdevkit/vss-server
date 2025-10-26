@@ -21,8 +21,17 @@ struct TomlConfig {
 }
 
 #[derive(Deserialize)]
+pub(crate) enum StoreType {
+	#[serde(rename = "postgres")]
+	Postgres,
+	#[serde(rename = "in-memory")]
+	InMemory,
+}
+
+#[derive(Deserialize)]
 struct ServerConfig {
 	bind_address: Option<SocketAddr>,
+	store_type: Option<StoreType>,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +62,7 @@ pub(crate) struct Configuration {
 	pub(crate) default_db: String,
 	pub(crate) vss_db: String,
 	pub(crate) tls_config: Option<Option<String>>,
+	pub(crate) store_type: Option<StoreType>,
 }
 
 #[inline]
@@ -94,13 +104,16 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		.transpose()?;
 	let bind_address = read_config(
 		bind_address_env,
-		server_config.and_then(|c| c.bind_address),
+		server_config.as_ref().and_then(|c| c.bind_address),
 		"VSS server bind address",
 		BIND_ADDR_VAR,
 	)?;
 
 	let rsa_pem_env = read_env(JWT_RSA_PEM_VAR)?;
 	let rsa_pem = rsa_pem_env.or(jwt_auth_config.and_then(|config| config.rsa_pem));
+
+	// Extract store_type from server_config
+	let store_type = server_config.and_then(|c| c.store_type);
 
 	let username_env = read_env(PSQL_USER_VAR)?;
 	let password_env = read_env(PSQL_PASS_VAR)?;
@@ -155,5 +168,5 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 
 	let postgresql_prefix = format!("postgresql://{}:{}@{}", username, password, address);
 
-	Ok(Configuration { bind_address, rsa_pem, postgresql_prefix, default_db, vss_db, tls_config })
+	Ok(Configuration { bind_address, rsa_pem, postgresql_prefix, default_db, vss_db, tls_config, store_type })
 }

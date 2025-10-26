@@ -24,6 +24,11 @@ cargo build --release
    ```
    cargo run -- server/vss-server-config.toml
    ```
+
+   **Note:** For testing purposes, you can pass `--in-memory` to use in-memory instead of PostgreSQL 
+   ```
+   cargo run -- server/vss-server-config.toml --in-memory
+   ```
 4. VSS endpoint should be reachable at `http://localhost:8080/vss`.
 
 ### Configuration
