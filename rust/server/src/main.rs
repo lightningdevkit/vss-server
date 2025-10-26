@@ -27,6 +27,7 @@ use api::kv_store::KvStore;
 use auth_impls::jwt::JWTAuthorizer;
 #[cfg(feature = "sigs")]
 use auth_impls::signature::SignatureValidatingAuthorizer;
+use impls::in_memory_store::InMemoryBackendImpl;
 use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
 use util::logger::ServerLogger;
 use vss_service::{VssService, VssServiceConfig};
@@ -36,12 +37,24 @@ mod vss_service;
 
 fn main() {
 	let args: Vec<String> = std::env::args().collect();
+	if args.len() < 2 {
+		eprintln!("Usage: {} <config-file-path> [--in-memory]", args[0]);
+		std::process::exit(1);
+	}
 
-	let config =
-		util::config::load_configuration(args.get(1).map(|s| s.as_str())).unwrap_or_else(|e| {
+	let use_in_memory = args.contains(&"--in-memory".to_string());
+
+	let mut config = util::config::load_configuration(args.get(1).map(|s| s.as_str()))
+		.unwrap_or_else(|e| {
 			eprintln!("Failed to load configuration: {}", e);
 			std::process::exit(-1);
 		});
+
+	// Override config if --in-memory flag is present
+	if use_in_memory {
+		config.store_type = Some(util::config::StoreType::InMemory);
+	}
+
 	let vss_service_config = match config.max_request_body_size {
 		Some(size) => match VssServiceConfig::new(size) {
 			Ok(config) => config,
@@ -125,39 +138,50 @@ fn main() {
 			std::process::exit(-1);
 		});
 
-		let store: Arc<dyn KvStore> = if let Some(crt_pem) = config.tls_config {
-			let postgres_tls_backend = PostgresTlsBackend::new(
-				&config.postgresql_prefix,
-				&config.default_db,
-				&config.vss_db,
-				crt_pem.as_deref(),
-			)
-			.await
-			.unwrap_or_else(|e| {
-				error!("Failed to start postgres TLS backend: {}", e);
-				std::process::exit(-1);
-			});
-			info!(
-				"Connected to PostgreSQL TLS backend with DSN: {}/{}",
-				config.postgresql_prefix, config.vss_db
-			);
-			Arc::new(postgres_tls_backend)
-		} else {
-			let postgres_plaintext_backend = PostgresPlaintextBackend::new(
-				&config.postgresql_prefix,
-				&config.default_db,
-				&config.vss_db,
-			)
-			.await
-			.unwrap_or_else(|e| {
-				error!("Failed to start postgres plaintext backend: {}", e);
-				std::process::exit(-1);
-			});
-			info!(
-				"Connected to PostgreSQL plaintext backend with DSN: {}/{}",
-				config.postgresql_prefix, config.vss_db
-			);
-			Arc::new(postgres_plaintext_backend)
+		// Default to Postgres if no store_type is specified in config
+		let store_type = config.store_type.unwrap_or(util::config::StoreType::Postgres);
+
+		let store: Arc<dyn KvStore> = match store_type {
+			util::config::StoreType::InMemory => {
+				info!("Using in-memory backend for testing");
+				Arc::new(InMemoryBackendImpl::new())
+			},
+			util::config::StoreType::Postgres => {
+				if let Some(crt_pem) = config.tls_config {
+					let postgres_tls_backend = PostgresTlsBackend::new(
+						&config.postgresql_prefix,
+						&config.default_db,
+						&config.vss_db,
+						crt_pem.as_deref(),
+					)
+					.await
+					.unwrap_or_else(|e| {
+						error!("Failed to start postgres TLS backend: {}", e);
+						std::process::exit(-1);
+					});
+					info!(
+						"Connected to PostgreSQL TLS backend with DSN: {}/{}",
+						config.postgresql_prefix, config.vss_db
+					);
+					Arc::new(postgres_tls_backend)
+				} else {
+					let postgres_plaintext_backend = PostgresPlaintextBackend::new(
+						&config.postgresql_prefix,
+						&config.default_db,
+						&config.vss_db,
+					)
+					.await
+					.unwrap_or_else(|e| {
+						error!("Failed to start postgres plaintext backend: {}", e);
+						std::process::exit(-1);
+					});
+					info!(
+						"Connected to PostgreSQL plaintext backend with DSN: {}/{}",
+						config.postgresql_prefix, config.vss_db
+					);
+					Arc::new(postgres_plaintext_backend)
+				}
+			}
 		};
 
 		let rest_svc_listener = TcpListener::bind(&config.bind_address).await.unwrap_or_else(|e| {
