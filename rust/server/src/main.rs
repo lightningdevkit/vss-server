@@ -20,6 +20,7 @@ use hyper_util::rt::TokioIo;
 use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
+use impls::in_memory_store::InMemoryBackendImpl;
 use impls::postgres_store::PostgresBackendImpl;
 use std::sync::Arc;
 
@@ -28,18 +29,27 @@ pub(crate) mod vss_service;
 
 fn main() {
 	let args: Vec<String> = std::env::args().collect();
-	if args.len() != 2 {
-		eprintln!("Usage: {} <config-file-path>", args[0]);
+	if args.len() < 2 {
+		eprintln!("Usage: {} <config-file-path> [--in-memory]", args[0]);
 		std::process::exit(1);
 	}
 
-	let config = match util::config::load_config(&args[1]) {
+	let config_path = &args[1];
+	let use_in_memory = args.contains(&"--in-memory".to_string());
+
+	let mut config = match util::config::load_config(config_path) {
 		Ok(cfg) => cfg,
 		Err(e) => {
 			eprintln!("Failed to load configuration: {}", e);
 			std::process::exit(1);
 		},
 	};
+
+	// Override the `store_type` if --in-memory flag passed
+	if use_in_memory {
+		println!("Overriding backend type: using in-memory backend (via --in-memory flag)");
+		config.server_config.store_type = "in_memory".to_string();
+	}
 
 	let addr: SocketAddr =
 		match format!("{}:{}", config.server_config.host, config.server_config.port).parse() {
@@ -67,15 +77,32 @@ fn main() {
 			},
 		};
 		let authorizer = Arc::new(NoopAuthorizer {});
-		let postgresql_config = config.postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
-		let endpoint = postgresql_config.to_postgresql_endpoint();
-		let db_name = postgresql_config.database;
-		let store = Arc::new(
-			PostgresBackendImpl::new(&endpoint, &db_name)
-				.await
-				.unwrap(),
-		);
-		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
+		let store: Arc<dyn KvStore> = match config.server_config.store_type.as_str() {
+            "postgres" => {
+                let pg_config = config.postgresql_config
+                    .expect("PostgreSQL configuration required for postgres backend");
+                let endpoint = pg_config.to_postgresql_endpoint();
+                let db_name = pg_config.database;
+                match PostgresBackendImpl::new(&endpoint, &db_name).await {
+                    Ok(backend) => {
+                        println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
+                        Arc::new(backend)
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to connect to PostgreSQL backend: {}", e);
+                        std::process::exit(1);
+                    },
+                }
+            },
+            "in_memory" => {
+                println!("Using in-memory backend for testing");
+                Arc::new(InMemoryBackendImpl::new())
+            },
+            _ => {
+                eprintln!("Invalid backend_type: {}. Must be 'postgres' or 'in_memory'", config.server_config.store_type);
+                std::process::exit(1);
+            },
+        };
 		let rest_svc_listener =
 			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
 		println!("Listening for incoming connections on {}", addr);
