@@ -1,0 +1,48 @@
+name: Continuous Integration
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:latest
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build and Deploy VSS Server
+        run: |
+          cd rust
+          cargo build
+          cargo run server/vss-server-config.toml&
+
+      - name: Hit endpoint to verify service is up
+        run: |
+          sleep 5
+
+          # Put request with store='storeId' and key=k1
+          hex=0A0773746F726549641A150A026B3110FFFFFFFFFFFFFFFFFF011A046B317631
+          curl --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/putObjects
+
+          # Get request with store='storeId' and key=k1
+          hex=0A0773746F7265496412026B31
+          curl --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/getObject
