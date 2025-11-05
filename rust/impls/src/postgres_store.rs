@@ -93,10 +93,7 @@ async fn drop_database(postgres_endpoint: &str, db_name: &str) -> Result<(), Err
 
 	let drop_database_statement = format!("{} {};", DROP_DB_CMD, db_name);
 	let num_rows = client.execute(&drop_database_statement, &[]).await.map_err(|e| {
-		Error::new(
-			ErrorKind::Other,
-			format!("Failed to drop database {}: {}", db_name, e),
-		)
+		Error::new(ErrorKind::Other, format!("Failed to drop database {}: {}", db_name, e))
 	})?;
 	assert_eq!(num_rows, 0);
 
@@ -134,10 +131,7 @@ impl PostgresBackendImpl {
 
 	async fn migrate_vss_database(&self, migrations: &[&str]) -> Result<(usize, usize), Error> {
 		let mut conn = self.pool.get().await.map_err(|e| {
-			Error::new(
-				ErrorKind::Other,
-				format!("Failed to fetch a connection from Pool: {}", e),
-			)
+			Error::new(ErrorKind::Other, format!("Failed to fetch a connection from Pool: {}", e))
 		})?;
 
 		// Get the next migration to be applied.
@@ -230,7 +224,9 @@ impl PostgresBackendImpl {
 	async fn get_upgrades_list(&self) -> Vec<usize> {
 		let conn = self.pool.get().await.unwrap();
 		let rows = conn.query(GET_MIGRATION_LOG_STMT, &[]).await.unwrap();
-		rows.iter().map(|row| usize::try_from(row.get::<&str, i32>(MIGRATION_LOG_COLUMN)).unwrap()).collect()
+		rows.iter()
+			.map(|row| usize::try_from(row.get::<&str, i32>(MIGRATION_LOG_COLUMN)).unwrap())
+			.collect()
 	}
 
 	fn build_vss_record(&self, user_token: String, store_id: String, kv: KeyValue) -> VssDbRecord {
@@ -581,10 +577,10 @@ impl KvStore for PostgresBackendImpl {
 
 #[cfg(test)]
 mod tests {
+	use super::{drop_database, DUMMY_MIGRATION, MIGRATIONS};
 	use crate::postgres_store::PostgresBackendImpl;
 	use api::define_kv_store_tests;
 	use tokio::sync::OnceCell;
-	use super::{MIGRATIONS, DUMMY_MIGRATION, drop_database};
 
 	const POSTGRES_ENDPOINT: &str = "postgresql://postgres:postgres@localhost:5432";
 	const MIGRATIONS_START: usize = 0;
@@ -670,7 +666,10 @@ mod tests {
 			let (start, end) = store.migrate_vss_database(&migrations).await.unwrap();
 			assert_eq!(start, MIGRATIONS_END + 1);
 			assert_eq!(end, MIGRATIONS_END + 3);
-			assert_eq!(store.get_upgrades_list().await, [MIGRATIONS_START, MIGRATIONS_END, MIGRATIONS_END + 1]);
+			assert_eq!(
+				store.get_upgrades_list().await,
+				[MIGRATIONS_START, MIGRATIONS_END, MIGRATIONS_END + 1]
+			);
 			assert_eq!(store.get_schema_version().await, MIGRATIONS_END + 3);
 		};
 
