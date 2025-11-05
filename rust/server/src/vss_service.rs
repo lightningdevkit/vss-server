@@ -129,29 +129,50 @@ async fn handle_request<
 }
 
 fn build_error_response(e: VssError) -> Response<Full<Bytes>> {
-	let error_response = match e {
-		VssError::NoSuchKeyError(msg) => ErrorResponse {
-			error_code: ErrorCode::NoSuchKeyException.into(),
-			message: msg.to_string(),
+	let (status_code, error_response) = match e {
+		VssError::NoSuchKeyError(msg) => {
+			let status = StatusCode::NOT_FOUND;
+			let error = ErrorResponse {
+				error_code: ErrorCode::NoSuchKeyException.into(),
+				message: msg.to_string(),
+			};
+			(status, error)
 		},
-		VssError::ConflictError(msg) => ErrorResponse {
-			error_code: ErrorCode::ConflictException.into(),
-			message: msg.to_string(),
+		VssError::ConflictError(msg) => {
+			let status = StatusCode::CONFLICT;
+			let error = ErrorResponse {
+				error_code: ErrorCode::ConflictException.into(),
+				message: msg.to_string(),
+			};
+			(status, error)
 		},
-		VssError::InvalidRequestError(msg) => ErrorResponse {
-			error_code: ErrorCode::InvalidRequestException.into(),
-			message: msg.to_string(),
+		VssError::InvalidRequestError(msg) => {
+			let status = StatusCode::BAD_REQUEST;
+			let error = ErrorResponse {
+				error_code: ErrorCode::InvalidRequestException.into(),
+				message: msg.to_string(),
+			};
+			(status, error)
 		},
 		VssError::AuthError(msg) => {
-			ErrorResponse { error_code: ErrorCode::AuthException.into(), message: msg.to_string() }
+			let status = StatusCode::UNAUTHORIZED;
+			let error = ErrorResponse {
+				error_code: ErrorCode::AuthException.into(),
+				message: msg.to_string(),
+			};
+			(status, error)
 		},
-		_ => ErrorResponse {
-			error_code: ErrorCode::InternalServerException.into(),
-			message: "Unknown Server Error occurred.".to_string(),
+		_ => {
+			let status = StatusCode::INTERNAL_SERVER_ERROR;
+			let error = ErrorResponse {
+				error_code: ErrorCode::InternalServerException.into(),
+				message: "Unknown Server Error occurred.".to_string(),
+			};
+			(status, error)
 		},
 	};
 	Response::builder()
-		.status(StatusCode::INTERNAL_SERVER_ERROR)
+		.status(status_code)
 		.body(Full::new(Bytes::from(error_response.encode_to_vec())))
 		// unwrap safety: body only errors when previous chained calls failed.
 		.unwrap()
