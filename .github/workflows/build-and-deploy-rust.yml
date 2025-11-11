@@ -28,7 +28,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
+      - name: Check formatting
+        run: rustup component add rustfmt && cd rust && cargo fmt --all -- --check
       - name: Build and Deploy VSS Server
         run: |
           cd rust
