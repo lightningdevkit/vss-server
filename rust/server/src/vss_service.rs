@@ -162,7 +162,7 @@ fn build_error_response(e: VssError) -> Response<Full<Bytes>> {
 			};
 			(status, error)
 		},
-		_ => {
+		VssError::InternalServerError(_) => {
 			let status = StatusCode::INTERNAL_SERVER_ERROR;
 			let error = ErrorResponse {
 				error_code: ErrorCode::InternalServerException.into(),
