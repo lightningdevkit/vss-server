@@ -23,25 +23,24 @@ jobs:
           mkdir -p rust/server
           cat > rust/server/vss-server-config.toml <<EOF
           [server_config]
-          host = "127.0.0.1"
-          port = 8080
+          bind_address = "127.0.0.1:8080"
           store_type = "in-memory"
           EOF
 
       - name: Build server
         working-directory: rust
-        run: cargo build --release --bin vss-server
+        run: RUSTFLAGS="--cfg noop_authorizer" cargo build --release --no-default-features --bin vss-server
 
       - name: Start VSS server
         working-directory: rust
         run: |
-          ./target/release/vss-server ./server/vss-server-config.toml --in-memory > server.log 2>&1 &
+          ./target/release/vss-server ./server/vss-server-config.toml > server.log 2>&1 &
           echo "Server PID: $!"
 
       - name: Wait for server
         run: |
           for i in {1..15}; do
-            if curl -s http://127.0.0.1:8080 > /dev/null; then
+            if curl -s http://127.0.0.1:8080/vss > /dev/null; then
               echo "Server is up!"
               exit 0
             fi
