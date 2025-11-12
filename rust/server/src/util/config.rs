@@ -168,5 +168,13 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 
 	let postgresql_prefix = format!("postgresql://{}:{}@{}", username, password, address);
 
-	Ok(Configuration { bind_address, rsa_pem, postgresql_prefix, default_db, vss_db, tls_config, store_type })
+	Ok(Configuration {
+		bind_address,
+		rsa_pem,
+		postgresql_prefix,
+		default_db,
+		vss_db,
+		tls_config,
+		store_type,
+	})
 }

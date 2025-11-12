@@ -7,14 +7,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  test-postgres:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:latest
-        ports:
-          - 5432:5432
+        ports: [5432:5432]
         env:
           POSTGRES_DB: postgres
           POSTGRES_USER: postgres
@@ -30,21 +29,56 @@ jobs:
         uses: actions/checkout@v3
         with:
           path: vss-server
+
       - name: Checkout LDK Node
         uses: actions/checkout@v3
         with:
           repository: lightningdevkit/ldk-node
           path: ldk-node
 
-      - name: Build and Deploy VSS Server
+      - name: Create Postgres config
         run: |
+          mkdir -p vss-server/rust/server
+          cat > vss-server/rust/server/vss-server-config.toml <<EOF
+          [server_config]
+          host = "127.0.0.1"
+          port = 8080
+          store_type = "postgres"
+          [postgresql_config]
+          host = "localhost"
+          port = 5432
+          database = "postgres"
+          username = "postgres"
+          password = "postgres"
+          EOF
+
+      - name: Build & Start VSS Server
+        working-directory: vss-server/rust
+        run: |
+          cargo build --release --bin vss-server
+          ./target/release/vss-server ./server/vss-server-config.toml > server.log 2>&1 &
+          echo "Server PID: $!"
+
+      - name: Wait for VSS
+        run: |
+          for i in {1..30}; do
+            if curl -s http://127.0.0.1:8080/vss > /dev/null; then
+              echo "VSS ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "VSS failed:"
+          cat vss-server/rust/server.log
+          exit 1
+
           cd vss-server/rust
           cargo build
           cargo run --no-default-features server/vss-server-config.toml&
       - name: Run LDK Node Integration tests
+        working-directory: ldk-node
         run: |
-          cd ldk-node
-          export TEST_VSS_BASE_URL="http://localhost:8080/vss"
+          export TEST_VSS_BASE_URL="http://127.0.0.1:8080/vss"
           RUSTFLAGS="--cfg vss_test" cargo test io::vss_store
           RUSTFLAGS="--cfg vss_test" cargo test --test integration_tests_vss
 
@@ -91,7 +125,7 @@ jobs:
             sleep 1
           done
           echo "VSS failed:"
-          cat vss-server/rust/vss.log
+          cat vss-server/rust/server.log
           exit 1
 
       - name: Run LDK Node Integration tests
