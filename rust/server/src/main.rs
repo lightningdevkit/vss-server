@@ -45,9 +45,7 @@ fn main() {
 		},
 	};
 
-	// Override the `store_type` if --in-memory flag passed
 	if use_in_memory {
-		println!("Overriding backend type: using in-memory backend (via --in-memory flag)");
 		config.server_config.store_type = "in_memory".to_string();
 	}
 
