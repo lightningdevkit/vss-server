@@ -1,6 +1,4 @@
-use crate::postgres_store::{
-	VssDbRecord, LIST_KEY_VERSIONS_MAX_PAGE_SIZE, MAX_PUT_REQUEST_ITEM_COUNT,
-};
+use crate::{VssDbRecord, LIST_KEY_VERSIONS_MAX_PAGE_SIZE, MAX_PUT_REQUEST_ITEM_COUNT};
 use api::error::VssError;
 use api::kv_store::{KvStore, GLOBAL_VERSION_KEY, INITIAL_RECORD_VERSION};
 use api::types::{
@@ -10,9 +8,9 @@ use api::types::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::prelude::Utc;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 fn build_storage_key(user_token: &str, store_id: &str, key: &str) -> String {
 	format!("{}#{}#{}", user_token, store_id, key)
@@ -20,31 +18,29 @@ fn build_storage_key(user_token: &str, store_id: &str, key: &str) -> String {
 
 /// In-memory implementation of the VSS Store.
 pub struct InMemoryBackendImpl {
-	store: Arc<RwLock<HashMap<String, VssDbRecord>>>,
+	store: Arc<Mutex<BTreeMap<String, VssDbRecord>>>,
 }
 
 impl InMemoryBackendImpl {
 	/// Creates an in-memory instance.
 	pub fn new() -> Self {
-		Self { store: Arc::new(RwLock::new(HashMap::new())) }
+		Self { store: Arc::new(Mutex::new(BTreeMap::new())) }
 	}
 
 	fn get_current_global_version(
-		&self, guard: &HashMap<String, VssDbRecord>, user_token: &str, store_id: &str,
+		&self, guard: &BTreeMap<String, VssDbRecord>, user_token: &str, store_id: &str,
 	) -> i64 {
 		let global_key = build_storage_key(user_token, store_id, GLOBAL_VERSION_KEY);
 		guard.get(&global_key).map(|r| r.version).unwrap_or(0)
 	}
 }
 
-// Validation functions - check if operations can succeed without modifying data
 fn validate_put_operation(
-	store: &HashMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: &KeyValue,
+	store: &BTreeMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: &KeyValue,
 ) -> Result<(), VssError> {
 	let key = build_storage_key(user_token, store_id, &key_value.key);
 
 	if key_value.version == -1 {
-		// Non-conditional upsert always succeeds
 		Ok(())
 	} else if key_value.version == 0 {
 		if store.contains_key(&key) {
@@ -75,12 +71,11 @@ fn validate_put_operation(
 }
 
 fn validate_delete_operation(
-	store: &HashMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: &KeyValue,
+	store: &BTreeMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: &KeyValue,
 ) -> Result<(), VssError> {
 	let key = build_storage_key(user_token, store_id, &key_value.key);
 
 	if key_value.version == -1 {
-		// Non-conditional delete always succeeds
 		Ok(())
 	} else {
 		if let Some(existing) = store.get(&key) {
@@ -101,20 +96,25 @@ fn validate_delete_operation(
 	}
 }
 
-fn execute_non_conditional_upsert(
-	store: &mut HashMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: KeyValue,
+fn execute_put_object(
+	store: &mut BTreeMap<String, VssDbRecord>, user_token: &str, store_id: &str,
+	key_value: KeyValue,
 ) {
 	let key = build_storage_key(user_token, store_id, &key_value.key);
 	let now = Utc::now();
 
 	match store.entry(key) {
-		std::collections::hash_map::Entry::Occupied(mut occ) => {
+		std::collections::btree_map::Entry::Occupied(mut occ) => {
 			let existing = occ.get_mut();
-			existing.version = INITIAL_RECORD_VERSION as i64;
+			existing.version = if key_value.version == -1 {
+				INITIAL_RECORD_VERSION as i64
+			} else {
+				existing.version.saturating_add(1)
+			};
 			existing.value = key_value.value.to_vec();
 			existing.last_updated_at = now;
 		},
-		std::collections::hash_map::Entry::Vacant(vac) => {
+		std::collections::btree_map::Entry::Vacant(vac) => {
 			let new_record = VssDbRecord {
 				user_token: user_token.to_string(),
 				store_id: store_id.to_string(),
@@ -129,51 +129,8 @@ fn execute_non_conditional_upsert(
 	}
 }
 
-fn execute_conditional_insert(
-	store: &mut HashMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: KeyValue,
-) {
-	let key = build_storage_key(user_token, store_id, &key_value.key);
-	let now = Utc::now();
-
-	let new_record = VssDbRecord {
-		user_token: user_token.to_string(),
-		store_id: store_id.to_string(),
-		key: key_value.key,
-		value: key_value.value.to_vec(),
-		version: INITIAL_RECORD_VERSION as i64,
-		created_at: now,
-		last_updated_at: now,
-	};
-	store.insert(key, new_record);
-}
-
-fn execute_conditional_update(
-	store: &mut HashMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: KeyValue,
-) {
-	let key = build_storage_key(user_token, store_id, &key_value.key);
-	let now = Utc::now();
-
-	if let Some(existing) = store.get_mut(&key) {
-		existing.version = key_value.version.saturating_add(1);
-		existing.value = key_value.value.to_vec();
-		existing.last_updated_at = now;
-	}
-}
-
-fn execute_put_object(
-	store: &mut HashMap<String, VssDbRecord>, user_token: &str, store_id: &str, key_value: KeyValue,
-) {
-	if key_value.version == -1 {
-		execute_non_conditional_upsert(store, user_token, store_id, key_value);
-	} else if key_value.version == 0 {
-		execute_conditional_insert(store, user_token, store_id, key_value);
-	} else {
-		execute_conditional_update(store, user_token, store_id, key_value);
-	}
-}
-
 fn execute_delete_object(
-	store: &mut HashMap<String, VssDbRecord>, user_token: &str, store_id: &str,
+	store: &mut BTreeMap<String, VssDbRecord>, user_token: &str, store_id: &str,
 	key_value: &KeyValue,
 ) {
 	let key = build_storage_key(user_token, store_id, &key_value.key);
@@ -186,7 +143,7 @@ impl KvStore for InMemoryBackendImpl {
 		&self, user_token: String, request: GetObjectRequest,
 	) -> Result<GetObjectResponse, VssError> {
 		let key = build_storage_key(&user_token, &request.store_id, &request.key);
-		let guard = self.store.read().await;
+		let guard = self.store.lock().await;
 
 		if let Some(record) = guard.get(&key) {
 			Ok(GetObjectResponse {
@@ -197,6 +154,7 @@ impl KvStore for InMemoryBackendImpl {
 				}),
 			})
 		} else if request.key == GLOBAL_VERSION_KEY {
+			// Non-zero global version is handled above; this is only for initial version 0.
 			Ok(GetObjectResponse {
 				value: Some(KeyValue {
 					key: GLOBAL_VERSION_KEY.to_string(),
@@ -221,7 +179,7 @@ impl KvStore for InMemoryBackendImpl {
 		}
 
 		let store_id = request.store_id.clone();
-		let mut guard = self.store.write().await;
+		let mut guard = self.store.lock().await;
 
 		if let Some(version) = request.global_version {
 			validate_put_operation(
@@ -268,7 +226,7 @@ impl KvStore for InMemoryBackendImpl {
 		})?;
 
 		let store_id = request.store_id.clone();
-		let mut guard = self.store.write().await;
+		let mut guard = self.store.lock().await;
 
 		execute_delete_object(&mut guard, &user_token, &store_id, &key_value);
 
@@ -278,71 +236,49 @@ impl KvStore for InMemoryBackendImpl {
 	async fn list_key_versions(
 		&self, user_token: String, request: ListKeyVersionsRequest,
 	) -> Result<ListKeyVersionsResponse, VssError> {
-		let store_id = request.store_id;
-		let key_prefix = request.key_prefix.unwrap_or("".to_string());
-		let page_token_option = request.page_token;
+		let store_id = request.store_id.clone();
+		let key_prefix = request.key_prefix.clone().unwrap_or("".to_string());
 		let page_size = request.page_size.unwrap_or(i32::MAX);
 		let limit = std::cmp::min(page_size, LIST_KEY_VERSIONS_MAX_PAGE_SIZE) as usize;
 
-		let (keys_with_versions, global_version) = {
-			let guard = self.store.read().await;
-
-			let mut global_version: Option<i64> = None;
-			if page_token_option.is_none() {
-				global_version =
-					Some(self.get_current_global_version(&guard, &user_token, &store_id));
-			}
-
-			let storage_prefix = format!("{}#{}#", user_token, store_id);
-			let mut temp: Vec<(String, i64)> = Vec::new();
-
-			for (storage_key, r) in guard.iter() {
-				if !storage_key.starts_with(&storage_prefix) {
-					continue;
-				}
-				let key = &storage_key[storage_prefix.len()..];
-				if key == GLOBAL_VERSION_KEY {
-					continue;
-				}
-				if !key_prefix.is_empty() && !key.starts_with(&key_prefix) {
-					continue;
-				}
-				temp.push((key.to_string(), r.version));
-			}
-
-			(temp, global_version)
-		};
-
-		let mut keys_with_versions = keys_with_versions;
-		keys_with_versions.sort_by(|a, b| a.0.cmp(&b.0));
-
-		let start_idx = if page_token_option.is_none() {
-			0
-		} else if page_token_option.as_deref() == Some("") {
-			keys_with_versions.len()
+		let offset: usize = if let Some(token) = &request.page_token {
+			token.parse::<usize>().map_err(|_| {
+				VssError::InvalidRequestError(format!("Invalid page token: {}", token))
+			})?
 		} else {
-			let token = page_token_option.as_deref().unwrap();
-			keys_with_versions
-				.iter()
-				.position(|(k, _)| k.as_str() > token)
-				.unwrap_or(keys_with_versions.len())
+			0
 		};
 
-		let page_items: Vec<KeyValue> = keys_with_versions
+		let guard = self.store.lock().await;
+
+		let mut global_version: Option<i64> = None;
+		if offset == 0 {
+			global_version = Some(self.get_current_global_version(&guard, &user_token, &store_id));
+		}
+
+		let storage_prefix = build_storage_key(&user_token, &store_id, &key_prefix);
+		let global_key = build_storage_key(&user_token, &store_id, GLOBAL_VERSION_KEY);
+
+		let page_items: Vec<KeyValue> = guard
 			.iter()
-			.skip(start_idx)
+			.filter(|(storage_key, _)| {
+				storage_key.starts_with(&storage_prefix) && *storage_key != &global_key
+			})
+			.skip(offset)
 			.take(limit)
-			.map(|(key, version)| KeyValue {
-				key: key.clone(),
-				value: Bytes::new(),
-				version: *version,
+			.map(|(storage_key, record)| {
+				let prefix_len = format!("{}#{}#", user_token, store_id).len();
+				let key = &storage_key[prefix_len..];
+
+				KeyValue { key: key.to_string(), value: Bytes::new(), version: record.version }
 			})
 			.collect();
 
+		let next_offset = offset + page_items.len();
 		let next_page_token = if page_items.is_empty() {
 			Some("".to_string())
 		} else {
-			page_items.last().map(|kv| kv.key.clone())
+			Some(next_offset.to_string())
 		};
 
 		Ok(ListKeyVersionsResponse { key_versions: page_items, next_page_token, global_version })

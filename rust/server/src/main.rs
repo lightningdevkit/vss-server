@@ -17,6 +17,7 @@ use tokio::signal::unix::SignalKind;
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 
+use crate::util::config::StoreType;
 use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
@@ -45,10 +46,8 @@ fn main() {
 		},
 	};
 
-	// Override the `store_type` if --in-memory flag passed
 	if use_in_memory {
-		println!("Overriding backend type: using in-memory backend (via --in-memory flag)");
-		config.server_config.store_type = "in_memory".to_string();
+		config.server_config.store_type = StoreType::InMemory;
 	}
 
 	let addr: SocketAddr =
@@ -77,8 +76,8 @@ fn main() {
 			},
 		};
 		let authorizer = Arc::new(NoopAuthorizer {});
-		let store: Arc<dyn KvStore> = match config.server_config.store_type.as_str() {
-            "postgres" => {
+		let store: Arc<dyn KvStore> = match config.server_config.store_type {
+            StoreType::Postgres => {
                 let pg_config = config.postgresql_config
                     .expect("PostgreSQL configuration required for postgres backend");
                 let endpoint = pg_config.to_postgresql_endpoint();
@@ -94,14 +93,10 @@ fn main() {
                     },
                 }
             },
-            "in_memory" => {
+            StoreType::InMemory => {
                 println!("Using in-memory backend for testing");
                 Arc::new(InMemoryBackendImpl::new())
-            },
-            _ => {
-                eprintln!("Invalid backend_type: {}. Must be 'postgres' or 'in_memory'", config.server_config.store_type);
-                std::process::exit(1);
-            },
+            }
         };
 		let rest_svc_listener =
 			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
