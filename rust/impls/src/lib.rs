@@ -13,9 +13,11 @@
 
 /// Contains in-memory backend implementation for VSS, for testing purposes only.
 pub mod in_memory_store;
-mod migrations;
+/// A shared abstraction
+pub mod models;
 /// Contains [PostgreSQL](https://www.postgresql.org/) based backend implementation for VSS.
 pub mod postgres_store;
+mod migrations;
 
 #[macro_use]
 extern crate api;
