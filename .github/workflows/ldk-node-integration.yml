@@ -102,7 +102,7 @@ jobs:
           [server_config]
           host = "127.0.0.1"
           port = 8080
-          store_type = "in_memory"
+          store_type = "in-memory"
           EOF
 
       - name: Build & Start VSS Server
