@@ -68,34 +68,14 @@ message PutObjectRequest {
 
   // Items to be written as a result of this `PutObjectRequest`.
   //
-  // In an item, each `key` is supplied with its corresponding `value` and `version`.
-  // Clients can choose to encrypt the keys client-side in order to obfuscate their usage patterns.
-  // If the write is successful, the previous `value` corresponding to the `key` will be overwritten.
-  //
   // Multiple items in `transaction_items` and `delete_items` of a single `PutObjectRequest` are written in
   // a database-transaction in an all-or-nothing fashion.
   // All Items in a single `PutObjectRequest` must have distinct keys.
   //
-  // Key-level versioning (Conditional Write):
-  //   Clients are expected to store a `version` against every `key`.
-  //   The write will succeed if the current DB version against the `key` is the same as in the request.
-  //   When initiating a `PutObjectRequest`, the request should contain their client-side `version`
-  //   for that key-value.
-  //
-  //   For the first write of any `key`, the `version` should be '0'. If the write succeeds, the client
-  //   must increment their corresponding key versions (client-side) by 1.
-  //   The server increments key versions (server-side) for every successful write, hence this
-  //   client-side increment is required to ensure matching versions. These updated key versions should
-  //   be used in subsequent `PutObjectRequest`s for the keys.
-  //
-  //   Requests with a conflicting/mismatched version will fail with `CONFLICT_EXCEPTION` as ErrorCode
-  //   for conditional writes.
-  //
-  // Skipping key-level versioning (Non-conditional Write):
-  //   If you wish to skip key-level version checks, set the `version` against the `key` to '-1'.
-  //   This will perform a non-conditional write query, after which the `version` against the `key`
-  //   is reset to '1'. Hence, the next `PutObjectRequest` for the `key` can be either
-  //   a non-conditional write or a conditional write with `version` set to `1`.
+  // In an item, each `key` is supplied with its corresponding `value` and `version`.
+  // Clients can choose to encrypt the keys client-side in order to obfuscate their usage patterns.
+  // If the write is successful, the previous `value` corresponding to the `key` will be overwritten.
+  // See `KeyValue.version` for more information on key-level versioning.
   //
   // Considerations for transactions:
   // Transaction writes of multiple items have a performance overhead, hence it is recommended to use
@@ -293,12 +273,28 @@ message KeyValue {
   // Key against which the value is stored.
   string key = 1;
 
-  // Version field is used for key-level versioning.
-  // For first write of key, `version` should be '0'. If the write succeeds, clients must increment
-  // their corresponding key version (client-side) by 1.
-  // The server increments key version (server-side) for every successful write, hence this
-  // client-side increment is required to ensure matching versions. These updated key versions should
-  // be used in subsequent `PutObjectRequest`s for the keys.
+  // Version field used for key-level versioning.
+  //
+  // Key-level versioning (Conditional Write):
+  //   Clients are expected to store a `version` against every `key`.
+  //   The write will succeed if the current DB version against the `key` is the same as in the request.
+  //   When initiating a `PutObjectRequest`, the request should contain their client-side `version`
+  //   for that key-value.
+  //
+  //   For the first write of any `key`, the `version` should be '0'. If the write succeeds, the client
+  //   must increment their corresponding key versions (client-side) by 1.
+  //   The server increments key versions (server-side) for every successful write, hence this
+  //   client-side increment is required to ensure matching versions. These updated key versions should
+  //   be used in subsequent `PutObjectRequest`s for the keys.
+  //
+  //   Requests with a conflicting/mismatched version will fail with `CONFLICT_EXCEPTION` as ErrorCode
+  //   for conditional writes.
+  //
+  // Skipping key-level versioning (Non-conditional Write):
+  //   If you wish to skip key-level version checks, set the `version` against the `key` to '-1'.
+  //   This will perform a non-conditional write query, after which the `version` against the `key`
+  //   is reset to '1'. Hence, the next `PutObjectRequest` for the `key` can be either
+  //   a non-conditional write or a conditional write with `version` set to `1`.
   int64 version = 2;
 
   // Object value in bytes which is stored (in put) and fetched (in get).
