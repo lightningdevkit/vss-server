@@ -7,9 +7,18 @@ pub(crate) struct Config {
 }
 
 #[derive(Deserialize)]
+pub(crate) enum StoreType {
+    #[serde(rename = "postgres")]
+    Postgres,
+    #[serde(rename = "in-memory")]
+    InMemory,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct ServerConfig {
 	pub(crate) host: String,
 	pub(crate) port: u16,
+	pub(crate) store_type: StoreType,
 }
 
 #[derive(Deserialize)]
