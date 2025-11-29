@@ -8,3 +8,5 @@ password = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POS
 host = "localhost"
 port = 5432
 database = "postgres"
+# tls = { }                        # Uncomment to make TLS connections to the postgres database using your machine's PKI
+# tls = { ca_file = "ca.pem" }     # Uncomment to make TLS connections to the postgres database with an additional root certificate
