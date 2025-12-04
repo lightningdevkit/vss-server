@@ -19,6 +19,12 @@ pub(crate) struct PostgreSQLConfig {
 	pub(crate) host: String,
 	pub(crate) port: u16,
 	pub(crate) database: String,
+	pub(crate) tls: Option<TlsConfig>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct TlsConfig {
+	pub(crate) ca_file: Option<String>,
 }
 
 impl PostgreSQLConfig {

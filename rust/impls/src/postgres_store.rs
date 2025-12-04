@@ -11,10 +11,14 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
 use bytes::Bytes;
 use chrono::Utc;
+use native_tls::TlsConnector;
+use postgres_native_tls::MakeTlsConnector;
 use std::cmp::min;
-use std::io;
-use std::io::{Error, ErrorKind};
-use tokio_postgres::{error, NoTls, Transaction};
+use std::io::{self, Error, ErrorKind};
+use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+use tokio_postgres::{error, Client, NoTls, Socket, Transaction};
+
+pub use native_tls::Certificate;
 
 pub(crate) struct VssDbRecord {
 	pub(crate) user_token: String,
@@ -44,13 +48,31 @@ pub const LIST_KEY_VERSIONS_MAX_PAGE_SIZE: i32 = 100;
 pub const MAX_PUT_REQUEST_ITEM_COUNT: usize = 1000;
 
 /// A [PostgreSQL](https://www.postgresql.org/) based backend implementation for VSS.
-pub struct PostgresBackendImpl {
-	pool: Pool<PostgresConnectionManager<NoTls>>,
+pub struct PostgresBackend<T>
+where
+	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+	<T as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+	<T as MakeTlsConnect<Socket>>::TlsConnect: Send,
+	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+	pool: Pool<PostgresConnectionManager<T>>,
 }
 
-async fn initialize_vss_database(postgres_endpoint: &str, db_name: &str) -> Result<(), Error> {
-	let postgres_dsn = format!("{}/{}", postgres_endpoint, "postgres");
-	let (client, connection) = tokio_postgres::connect(&postgres_dsn, NoTls)
+/// A postgres backend with plaintext connections to the database
+pub type PostgresPlaintextBackend = PostgresBackend<NoTls>;
+
+/// A postgres backend with TLS connections to the database
+pub type PostgresTlsBackend = PostgresBackend<MakeTlsConnector>;
+
+async fn make_postgres_db_connection<T>(postgres_endpoint: &str, tls: T) -> Result<Client, Error>
+where
+	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+	T::Stream: Send + Sync,
+	T::TlsConnect: Send,
+	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+	let dsn = format!("{}/{}", postgres_endpoint, "postgres");
+	let (client, connection) = tokio_postgres::connect(&dsn, tls)
 		.await
 		.map_err(|e| Error::new(ErrorKind::Other, format!("Connection error: {}", e)))?;
 	// Connection must be driven on a separate task, and will resolve when the client is dropped
@@ -59,6 +81,19 @@ async fn initialize_vss_database(postgres_endpoint: &str, db_name: &str) -> Resu
 			eprintln!("Connection error: {}", e);
 		}
 	});
+	Ok(client)
+}
+
+async fn initialize_vss_database<T>(
+	postgres_endpoint: &str, db_name: &str, tls: T,
+) -> Result<(), Error>
+where
+	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+	T::Stream: Send + Sync,
+	T::TlsConnect: Send,
+	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+	let client = make_postgres_db_connection(&postgres_endpoint, tls).await?;
 
 	let num_rows = client.execute(CHECK_DB_STMT, &[&db_name]).await.map_err(|e| {
 		Error::new(
@@ -66,7 +101,6 @@ async fn initialize_vss_database(postgres_endpoint: &str, db_name: &str) -> Resu
 			format!("Failed to check presence of database {}: {}", db_name, e),
 		)
 	})?;
-
 	if num_rows == 0 {
 		let stmt = format!("{} {};", INIT_DB_CMD, db_name);
 		client.execute(&stmt, &[]).await.map_err(|e| {
@@ -79,17 +113,14 @@ async fn initialize_vss_database(postgres_endpoint: &str, db_name: &str) -> Resu
 }
 
 #[cfg(test)]
-async fn drop_database(postgres_endpoint: &str, db_name: &str) -> Result<(), Error> {
-	let postgres_dsn = format!("{}/{}", postgres_endpoint, "postgres");
-	let (client, connection) = tokio_postgres::connect(&postgres_dsn, NoTls)
-		.await
-		.map_err(|e| Error::new(ErrorKind::Other, format!("Connection error: {}", e)))?;
-	// Connection must be driven on a separate task, and will resolve when the client is dropped
-	tokio::spawn(async move {
-		if let Err(e) = connection.await {
-			eprintln!("Connection error: {}", e);
-		}
-	});
+async fn drop_database<T>(postgres_endpoint: &str, db_name: &str, tls: T) -> Result<(), Error>
+where
+	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+	T::Stream: Send + Sync,
+	T::TlsConnect: Send,
+	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+	let client = make_postgres_db_connection(&postgres_endpoint, tls).await?;
 
 	let drop_database_statement = format!("{} {};", DROP_DB_CMD, db_name);
 	let num_rows = client.execute(&drop_database_statement, &[]).await.map_err(|e| {
@@ -100,14 +131,42 @@ async fn drop_database(postgres_endpoint: &str, db_name: &str) -> Result<(), Err
 	Ok(())
 }
 
-impl PostgresBackendImpl {
-	/// Constructs a [`PostgresBackendImpl`] using `dsn` for PostgreSQL connection information.
+impl PostgresPlaintextBackend {
+	/// Constructs a [`PostgresPlaintextBackend`] using `postgres_endpoint` for PostgreSQL connection information.
 	pub async fn new(postgres_endpoint: &str, db_name: &str) -> Result<Self, Error> {
-		initialize_vss_database(postgres_endpoint, db_name).await?;
+		PostgresBackend::new_internal(postgres_endpoint, db_name, NoTls).await
+	}
+}
 
+impl PostgresTlsBackend {
+	/// Constructs a [`PostgresTlsBackend`] using `postgres_endpoint` for PostgreSQL connection information.
+	pub async fn new(
+		postgres_endpoint: &str, db_name: &str, additional_certificate: Option<Certificate>,
+	) -> Result<Self, Error> {
+		let mut builder = TlsConnector::builder();
+		if let Some(cert) = additional_certificate {
+			builder.add_root_certificate(cert);
+		}
+		let connector = builder.build().map_err(|e| {
+			Error::new(ErrorKind::Other, format!("Error building tls connector: {}", e))
+		})?;
+		PostgresBackend::new_internal(postgres_endpoint, db_name, MakeTlsConnector::new(connector))
+			.await
+	}
+}
+
+impl<T> PostgresBackend<T>
+where
+	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+	T::Stream: Send + Sync,
+	T::TlsConnect: Send,
+	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+	async fn new_internal(postgres_endpoint: &str, db_name: &str, tls: T) -> Result<Self, Error> {
+		initialize_vss_database(postgres_endpoint, db_name, tls.clone()).await?;
 		let vss_dsn = format!("{}/{}", postgres_endpoint, db_name);
 		let manager =
-			PostgresConnectionManager::new_from_stringlike(vss_dsn, NoTls).map_err(|e| {
+			PostgresConnectionManager::new_from_stringlike(vss_dsn, tls).map_err(|e| {
 				Error::new(
 					ErrorKind::Other,
 					format!("Failed to create PostgresConnectionManager: {}", e),
@@ -121,7 +180,7 @@ impl PostgresBackendImpl {
 			.build(manager)
 			.await
 			.map_err(|e| Error::new(ErrorKind::Other, format!("Failed to build Pool: {}", e)))?;
-		let postgres_backend = PostgresBackendImpl { pool };
+		let postgres_backend = PostgresBackend { pool };
 
 		#[cfg(not(test))]
 		postgres_backend.migrate_vss_database(MIGRATIONS).await?;
@@ -376,7 +435,13 @@ impl PostgresBackendImpl {
 }
 
 #[async_trait]
-impl KvStore for PostgresBackendImpl {
+impl<T> KvStore for PostgresBackend<T>
+where
+	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+	T::Stream: Send + Sync,
+	T::TlsConnect: Send,
+	<T::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
 	async fn get(
 		&self, user_token: String, request: GetObjectRequest,
 	) -> Result<GetObjectResponse, VssError> {
@@ -578,9 +643,10 @@ impl KvStore for PostgresBackendImpl {
 #[cfg(test)]
 mod tests {
 	use super::{drop_database, DUMMY_MIGRATION, MIGRATIONS};
-	use crate::postgres_store::PostgresBackendImpl;
+	use crate::postgres_store::PostgresPlaintextBackend;
 	use api::define_kv_store_tests;
 	use tokio::sync::OnceCell;
+	use tokio_postgres::NoTls;
 
 	const POSTGRES_ENDPOINT: &str = "postgresql://postgres:postgres@localhost:5432";
 	const MIGRATIONS_START: usize = 0;
@@ -588,18 +654,19 @@ mod tests {
 
 	static START: OnceCell<()> = OnceCell::const_new();
 
-	define_kv_store_tests!(PostgresKvStoreTest, PostgresBackendImpl, {
+	define_kv_store_tests!(PostgresKvStoreTest, PostgresPlaintextBackend, {
 		let db_name = "postgres_kv_store_tests";
 		START
 			.get_or_init(|| async {
-				let _ = drop_database(POSTGRES_ENDPOINT, db_name).await;
-				let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+				let _ = drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await;
+				let store =
+					PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 				let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 				assert_eq!(start, MIGRATIONS_START);
 				assert_eq!(end, MIGRATIONS_END);
 			})
 			.await;
-		let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+		let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 		let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 		assert_eq!(start, MIGRATIONS_END);
 		assert_eq!(end, MIGRATIONS_END);
@@ -612,17 +679,17 @@ mod tests {
 	#[should_panic(expected = "We do not allow downgrades")]
 	async fn panic_on_downgrade() {
 		let db_name = "panic_on_downgrade_test";
-		let _ = drop_database(POSTGRES_ENDPOINT, db_name).await;
+		let _ = drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await;
 		{
 			let mut migrations = MIGRATIONS.to_vec();
 			migrations.push(DUMMY_MIGRATION);
-			let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 			let (start, end) = store.migrate_vss_database(&migrations).await.unwrap();
 			assert_eq!(start, MIGRATIONS_START);
 			assert_eq!(end, MIGRATIONS_END + 1);
 		};
 		{
-			let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 			let _ = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 		};
 	}
@@ -630,9 +697,9 @@ mod tests {
 	#[tokio::test]
 	async fn new_migrations_increments_upgrades() {
 		let db_name = "new_migrations_increments_upgrades_test";
-		let _ = drop_database(POSTGRES_ENDPOINT, db_name).await;
+		let _ = drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await;
 		{
-			let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 			assert_eq!(start, MIGRATIONS_START);
 			assert_eq!(end, MIGRATIONS_END);
@@ -640,7 +707,7 @@ mod tests {
 			assert_eq!(store.get_schema_version().await, MIGRATIONS_END);
 		};
 		{
-			let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 			assert_eq!(start, MIGRATIONS_END);
 			assert_eq!(end, MIGRATIONS_END);
@@ -651,7 +718,7 @@ mod tests {
 		let mut migrations = MIGRATIONS.to_vec();
 		migrations.push(DUMMY_MIGRATION);
 		{
-			let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 			let (start, end) = store.migrate_vss_database(&migrations).await.unwrap();
 			assert_eq!(start, MIGRATIONS_END);
 			assert_eq!(end, MIGRATIONS_END + 1);
@@ -662,7 +729,7 @@ mod tests {
 		migrations.push(DUMMY_MIGRATION);
 		migrations.push(DUMMY_MIGRATION);
 		{
-			let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 			let (start, end) = store.migrate_vss_database(&migrations).await.unwrap();
 			assert_eq!(start, MIGRATIONS_END + 1);
 			assert_eq!(end, MIGRATIONS_END + 3);
@@ -674,13 +741,13 @@ mod tests {
 		};
 
 		{
-			let store = PostgresBackendImpl::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
 			let list = store.get_upgrades_list().await;
 			assert_eq!(list, [MIGRATIONS_START, MIGRATIONS_END, MIGRATIONS_END + 1]);
 			let version = store.get_schema_version().await;
 			assert_eq!(version, MIGRATIONS_END + 3);
 		}
 
-		drop_database(POSTGRES_ENDPOINT, db_name).await.unwrap();
+		drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await.unwrap();
 	}
 }
