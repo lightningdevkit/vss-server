@@ -1,12 +1,12 @@
 [server_config]
-host = "127.0.0.1"
-port = 8080
+bind_address = "127.0.0.1:8080"
+# rsa_pub_file_path = "rsa_public_key.pem"        # Uncomment to verify JWT tokens in the HTTP Authorization header
 
 [postgresql_config]
-username = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_USERNAME`
-password = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_PASSWORD`
-host = "localhost"
-port = 5432
-database = "postgres"
-# tls = { }                        # Uncomment to make TLS connections to the postgres database using your machine's PKI
-# tls = { ca_file = "ca.pem" }     # Uncomment to make TLS connections to the postgres database with an additional root certificate
+username = "postgres"                            # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_USERNAME`
+password = "postgres"                            # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_PASSWORD`
+address = "127.0.0.1:5432"                       # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_ADDRESS`
+default_database = "postgres"                    # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_DEFAULT_DATABASE`
+vss_database = "vss"                             # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_VSS_DATABASE`
+# tls = { }                                      # Uncomment, or set env var `VSS_POSTGRESQL_TLS=1` to make TLS connections to the postgres database using your machine's PKI
+# tls = { crt_file_path = "ca.crt" }             # Uncomment, or set env var `VSS_POSTGRESQL_CRT_FILE_PATH=ca.crt` to make TLS connections to the postgres database with an additional root certificate

@@ -9,8 +9,6 @@
 #![deny(rustdoc::private_intra_doc_links)]
 #![deny(missing_docs)]
 
-use std::net::SocketAddr;
-
 use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
 
@@ -20,11 +18,12 @@ use hyper_util::rt::TokioIo;
 use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
-use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
+use auth_impls::JWTAuthorizer;
+use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
 use std::sync::Arc;
 
-pub(crate) mod util;
-pub(crate) mod vss_service;
+mod util;
+mod vss_service;
 
 fn main() {
 	let args: Vec<String> = std::env::args().collect();
@@ -33,22 +32,10 @@ fn main() {
 		std::process::exit(1);
 	}
 
-	let config = match util::config::load_config(&args[1]) {
-		Ok(cfg) => cfg,
-		Err(e) => {
-			eprintln!("Failed to load configuration: {}", e);
-			std::process::exit(1);
-		},
-	};
-
-	let addr: SocketAddr =
-		match format!("{}:{}", config.server_config.host, config.server_config.port).parse() {
-			Ok(addr) => addr,
-			Err(e) => {
-				eprintln!("Invalid host/port configuration: {}", e);
-				std::process::exit(1);
-			},
-		};
+	let config = util::config::load_configuration(&args[1]).unwrap_or_else(|e| {
+		eprintln!("Failed to load configuration: {}", e);
+		std::process::exit(-1);
+	});
 
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
@@ -66,52 +53,59 @@ fn main() {
 				std::process::exit(-1);
 			},
 		};
-		let authorizer: Arc<dyn Authorizer> = Arc::new(NoopAuthorizer {});
-		let postgresql_config =
-			config.postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
-		let endpoint = postgresql_config.to_postgresql_endpoint();
-		let db_name = postgresql_config.database;
-		let store: Arc<dyn KvStore> = if let Some(tls_config) = postgresql_config.tls {
-			let additional_certificate = tls_config.ca_file.map(|file| {
-				let certificate = match std::fs::read(&file) {
-					Ok(cert) => cert,
-					Err(e) => {
-						println!("Failed to read certificate file: {}", e);
-						std::process::exit(-1);
-					},
-				};
-				match Certificate::from_pem(&certificate) {
-					Ok(cert) => cert,
-					Err(e) => {
-						println!("Failed to parse certificate file: {}", e);
-						std::process::exit(-1);
-					},
-				}
+
+		let authorizer: Arc<dyn Authorizer> =
+			if let Some(rsa_public_key) = config.jwt_rsa_public_key {
+				let jwt_authorizer = JWTAuthorizer::new(rsa_public_key).await;
+				println!("Configured JWT authorizer");
+				Arc::new(jwt_authorizer)
+			} else {
+				let noop_authorizer = NoopAuthorizer {};
+				println!("No authentication method configured");
+				Arc::new(noop_authorizer)
+			};
+
+		let store: Arc<dyn KvStore> = if let Some(certificate) = config.tls_config {
+			let postgres_tls_backend = PostgresTlsBackend::new(
+				&config.postgresql_prefix,
+				&config.default_db,
+				&config.vss_db,
+				certificate,
+			)
+			.await
+			.unwrap_or_else(|e| {
+				println!("Failed to start postgres TLS backend: {}", e);
+				std::process::exit(-1);
 			});
-			let postgres_tls_backend =
-				match PostgresTlsBackend::new(&endpoint, &db_name, additional_certificate).await {
-					Ok(backend) => backend,
-					Err(e) => {
-						println!("Failed to start postgres tls backend: {}", e);
-						std::process::exit(-1);
-					},
-				};
+			println!(
+				"Connected to PostgreSQL TLS backend with DSN: {}/{}",
+				config.postgresql_prefix, config.vss_db
+			);
 			Arc::new(postgres_tls_backend)
 		} else {
-			let postgres_plaintext_backend =
-				match PostgresPlaintextBackend::new(&endpoint, &db_name).await {
-					Ok(backend) => backend,
-					Err(e) => {
-						println!("Failed to start postgres plaintext backend: {}", e);
-						std::process::exit(-1);
-					},
-				};
+			let postgres_plaintext_backend = PostgresPlaintextBackend::new(
+				&config.postgresql_prefix,
+				&config.default_db,
+				&config.vss_db,
+			)
+			.await
+			.unwrap_or_else(|e| {
+				println!("Failed to start postgres plaintext backend: {}", e);
+				std::process::exit(-1);
+			});
+			println!(
+				"Connected to PostgreSQL plaintext backend with DSN: {}/{}",
+				config.postgresql_prefix, config.vss_db
+			);
 			Arc::new(postgres_plaintext_backend)
 		};
-		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
-		let rest_svc_listener =
-			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
-		println!("Listening for incoming connections on {}", addr);
+
+		let rest_svc_listener = TcpListener::bind(&config.bind_address).await.unwrap_or_else(|e| {
+			println!("Failed to bind listening port: {}", e);
+			std::process::exit(-1);
+		});
+		println!("Listening for incoming connections on {}", config.bind_address);
+
 		loop {
 			tokio::select! {
 				res = rest_svc_listener.accept() => {
