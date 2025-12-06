@@ -14,9 +14,11 @@
 use api::auth::{AuthResponse, Authorizer};
 use api::error::VssError;
 use async_trait::async_trait;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, Validation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+pub use jsonwebtoken::DecodingKey;
 
 /// A JWT based authorizer, only allows requests with verified 'JsonWebToken' signed by the given
 /// issuer key.
