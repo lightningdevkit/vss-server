@@ -10,6 +10,7 @@
 #![deny(missing_docs)]
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
@@ -17,12 +18,12 @@ use tokio::signal::unix::SignalKind;
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 
-use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
 use auth_impls::{DecodingKey, JWTAuthorizer};
 use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
-use std::sync::Arc;
+use util::config::{Config, ServerConfig};
+use vss_service::VssService;
 
 mod util;
 mod vss_service;
@@ -36,22 +37,21 @@ fn main() {
 		std::process::exit(1);
 	}
 
-	let config = match util::config::load_config(&args[1]) {
-		Ok(cfg) => cfg,
-		Err(e) => {
-			eprintln!("Failed to load configuration: {}", e);
-			std::process::exit(1);
-		},
-	};
-
-	let addr: SocketAddr =
-		match format!("{}:{}", config.server_config.host, config.server_config.port).parse() {
-			Ok(addr) => addr,
+	let Config { server_config: ServerConfig { host, port }, jwt_auth_config, postgresql_config } =
+		match util::config::load_config(&args[1]) {
+			Ok(cfg) => cfg,
 			Err(e) => {
-				eprintln!("Invalid host/port configuration: {}", e);
+				eprintln!("Failed to load configuration: {}", e);
 				std::process::exit(1);
 			},
 		};
+	let addr: SocketAddr = match format!("{}:{}", host, port).parse() {
+		Ok(addr) => addr,
+		Err(e) => {
+			eprintln!("Invalid host/port configuration: {}", e);
+			std::process::exit(1);
+		},
+	};
 
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),

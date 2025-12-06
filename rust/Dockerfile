@@ -32,14 +32,7 @@ WORKDIR /app
 COPY --from=builder /build/target/release/vss-server /app/vss-server
 
 # Copy default configuration file
-#COPY server/vss-server-config.toml /app/vss-server-config.toml
-
-# Environment variables for PostgreSQL connection
-#ENV VSS_POSTGRESQL_USERNAME=postgres
-#ENV VSS_POSTGRESQL_PASSWORD=YOU_MUST_CHANGE_THIS_PASSWORD
-#ENV VSS_POSTGRESQL_HOST=postgres
-#ENV VSS_POSTGRESQL_PORT=5432
-#ENV VSS_POSTGRESQL_DATABASE=postgres
+COPY server/vss-server-config.toml /app/vss-server-config.toml
 
 EXPOSE 8080
 

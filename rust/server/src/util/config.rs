@@ -3,6 +3,7 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub(crate) struct Config {
 	pub(crate) server_config: ServerConfig,
+	pub(crate) jwt_auth_config: Option<JwtAuthConfig>,
 	pub(crate) postgresql_config: Option<PostgreSQLConfig>,
 	pub(crate) sentry_config: Option<SentryConfig>,
 }
@@ -37,6 +38,11 @@ pub(crate) struct ServerConfig {
 	pub(crate) host: String,
 	pub(crate) port: u16,
 	pub(crate) rsa_pub_file_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct JwtAuthConfig {
+	pub(crate) rsa_pem: String,
 }
 
 #[derive(Deserialize)]
