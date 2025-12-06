@@ -64,14 +64,16 @@ pub type PostgresPlaintextBackend = PostgresBackend<NoTls>;
 /// A postgres backend with TLS connections to the database
 pub type PostgresTlsBackend = PostgresBackend<MakeTlsConnector>;
 
-async fn make_postgres_db_connection<T>(postgres_endpoint: &str, tls: T) -> Result<Client, Error>
+async fn make_db_connection<T>(
+	postgres_endpoint: &str, db_name: &str, tls: T,
+) -> Result<Client, Error>
 where
 	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
 	T::Stream: Send + Sync,
 	T::TlsConnect: Send,
 	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-	let dsn = format!("{}/{}", postgres_endpoint, "postgres");
+	let dsn = format!("{}/{}", postgres_endpoint, db_name);
 	let (client, connection) = tokio_postgres::connect(&dsn, tls)
 		.await
 		.map_err(|e| Error::new(ErrorKind::Other, format!("Connection error: {}", e)))?;
@@ -84,8 +86,8 @@ where
 	Ok(client)
 }
 
-async fn initialize_vss_database<T>(
-	postgres_endpoint: &str, db_name: &str, tls: T,
+async fn create_database<T>(
+	postgres_endpoint: &str, default_db: &str, db_name: &str, tls: T,
 ) -> Result<(), Error>
 where
 	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -93,7 +95,7 @@ where
 	T::TlsConnect: Send,
 	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-	let client = make_postgres_db_connection(&postgres_endpoint, tls).await?;
+	let client = make_db_connection(postgres_endpoint, default_db, tls).await?;
 
 	let num_rows = client.execute(CHECK_DB_STMT, &[&db_name]).await.map_err(|e| {
 		Error::new(
@@ -113,14 +115,16 @@ where
 }
 
 #[cfg(test)]
-async fn drop_database<T>(postgres_endpoint: &str, db_name: &str, tls: T) -> Result<(), Error>
+async fn drop_database<T>(
+	postgres_endpoint: &str, default_db: &str, db_name: &str, tls: T,
+) -> Result<(), Error>
 where
 	T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
 	T::Stream: Send + Sync,
 	T::TlsConnect: Send,
 	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-	let client = make_postgres_db_connection(&postgres_endpoint, tls).await?;
+	let client = make_db_connection(postgres_endpoint, default_db, tls).await?;
 
 	let drop_database_statement = format!("{} {};", DROP_DB_CMD, db_name);
 	let num_rows = client.execute(&drop_database_statement, &[]).await.map_err(|e| {
@@ -133,15 +137,18 @@ where
 
 impl PostgresPlaintextBackend {
 	/// Constructs a [`PostgresPlaintextBackend`] using `postgres_endpoint` for PostgreSQL connection information.
-	pub async fn new(postgres_endpoint: &str, db_name: &str) -> Result<Self, Error> {
-		PostgresBackend::new_internal(postgres_endpoint, db_name, NoTls).await
+	pub async fn new(
+		postgres_endpoint: &str, default_db: &str, vss_db: &str,
+	) -> Result<Self, Error> {
+		PostgresBackend::new_internal(postgres_endpoint, default_db, vss_db, NoTls).await
 	}
 }
 
 impl PostgresTlsBackend {
 	/// Constructs a [`PostgresTlsBackend`] using `postgres_endpoint` for PostgreSQL connection information.
 	pub async fn new(
-		postgres_endpoint: &str, db_name: &str, additional_certificate: Option<Certificate>,
+		postgres_endpoint: &str, default_db: &str, vss_db: &str,
+		additional_certificate: Option<Certificate>,
 	) -> Result<Self, Error> {
 		let mut builder = TlsConnector::builder();
 		if let Some(cert) = additional_certificate {
@@ -150,8 +157,13 @@ impl PostgresTlsBackend {
 		let connector = builder.build().map_err(|e| {
 			Error::new(ErrorKind::Other, format!("Error building tls connector: {}", e))
 		})?;
-		PostgresBackend::new_internal(postgres_endpoint, db_name, MakeTlsConnector::new(connector))
-			.await
+		PostgresBackend::new_internal(
+			postgres_endpoint,
+			default_db,
+			vss_db,
+			MakeTlsConnector::new(connector),
+		)
+		.await
 	}
 }
 
@@ -162,9 +174,11 @@ where
 	T::TlsConnect: Send,
 	<<T as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-	async fn new_internal(postgres_endpoint: &str, db_name: &str, tls: T) -> Result<Self, Error> {
-		initialize_vss_database(postgres_endpoint, db_name, tls.clone()).await?;
-		let vss_dsn = format!("{}/{}", postgres_endpoint, db_name);
+	async fn new_internal(
+		postgres_endpoint: &str, default_db: &str, vss_db: &str, tls: T,
+	) -> Result<Self, Error> {
+		create_database(postgres_endpoint, default_db, vss_db, tls.clone()).await?;
+		let vss_dsn = format!("{}/{}", postgres_endpoint, vss_db);
 		let manager =
 			PostgresConnectionManager::new_from_stringlike(vss_dsn, tls).map_err(|e| {
 				Error::new(
@@ -649,24 +663,27 @@ mod tests {
 	use tokio_postgres::NoTls;
 
 	const POSTGRES_ENDPOINT: &str = "postgresql://postgres:postgres@localhost:5432";
+	const DEFAULT_DB: &str = "postgres";
 	const MIGRATIONS_START: usize = 0;
 	const MIGRATIONS_END: usize = MIGRATIONS.len();
 
 	static START: OnceCell<()> = OnceCell::const_new();
 
 	define_kv_store_tests!(PostgresKvStoreTest, PostgresPlaintextBackend, {
-		let db_name = "postgres_kv_store_tests";
+		let vss_db = "postgres_kv_store_tests";
 		START
 			.get_or_init(|| async {
-				let _ = drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await;
-				let store =
-					PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+				let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
+				let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db)
+					.await
+					.unwrap();
 				let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 				assert_eq!(start, MIGRATIONS_START);
 				assert_eq!(end, MIGRATIONS_END);
 			})
 			.await;
-		let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+		let store =
+			PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 		let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 		assert_eq!(start, MIGRATIONS_END);
 		assert_eq!(end, MIGRATIONS_END);
@@ -678,28 +695,31 @@ mod tests {
 	#[tokio::test]
 	#[should_panic(expected = "We do not allow downgrades")]
 	async fn panic_on_downgrade() {
-		let db_name = "panic_on_downgrade_test";
-		let _ = drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await;
+		let vss_db = "panic_on_downgrade_test";
+		let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
 		{
 			let mut migrations = MIGRATIONS.to_vec();
 			migrations.push(DUMMY_MIGRATION);
-			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 			let (start, end) = store.migrate_vss_database(&migrations).await.unwrap();
 			assert_eq!(start, MIGRATIONS_START);
 			assert_eq!(end, MIGRATIONS_END + 1);
 		};
 		{
-			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 			let _ = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 		};
 	}
 
 	#[tokio::test]
 	async fn new_migrations_increments_upgrades() {
-		let db_name = "new_migrations_increments_upgrades_test";
-		let _ = drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await;
+		let vss_db = "new_migrations_increments_upgrades_test";
+		let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
 		{
-			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 			assert_eq!(start, MIGRATIONS_START);
 			assert_eq!(end, MIGRATIONS_END);
@@ -707,7 +727,8 @@ mod tests {
 			assert_eq!(store.get_schema_version().await, MIGRATIONS_END);
 		};
 		{
-			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
 			assert_eq!(start, MIGRATIONS_END);
 			assert_eq!(end, MIGRATIONS_END);
@@ -718,7 +739,8 @@ mod tests {
 		let mut migrations = MIGRATIONS.to_vec();
 		migrations.push(DUMMY_MIGRATION);
 		{
-			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 			let (start, end) = store.migrate_vss_database(&migrations).await.unwrap();
 			assert_eq!(start, MIGRATIONS_END);
 			assert_eq!(end, MIGRATIONS_END + 1);
@@ -729,7 +751,8 @@ mod tests {
 		migrations.push(DUMMY_MIGRATION);
 		migrations.push(DUMMY_MIGRATION);
 		{
-			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 			let (start, end) = store.migrate_vss_database(&migrations).await.unwrap();
 			assert_eq!(start, MIGRATIONS_END + 1);
 			assert_eq!(end, MIGRATIONS_END + 3);
@@ -741,13 +764,14 @@ mod tests {
 		};
 
 		{
-			let store = PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, db_name).await.unwrap();
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
 			let list = store.get_upgrades_list().await;
 			assert_eq!(list, [MIGRATIONS_START, MIGRATIONS_END, MIGRATIONS_END + 1]);
 			let version = store.get_schema_version().await;
 			assert_eq!(version, MIGRATIONS_END + 3);
 		}
 
-		drop_database(POSTGRES_ENDPOINT, db_name, NoTls).await.unwrap();
+		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
 	}
 }

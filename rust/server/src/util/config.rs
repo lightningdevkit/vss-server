@@ -18,7 +18,8 @@ pub(crate) struct PostgreSQLConfig {
 	pub(crate) password: Option<String>, // Optional in TOML, can be overridden by env
 	pub(crate) host: String,
 	pub(crate) port: u16,
-	pub(crate) database: String,
+	pub(crate) default_database: String,
+	pub(crate) vss_database: String,
 	pub(crate) tls: Option<TlsConfig>,
 }
 
