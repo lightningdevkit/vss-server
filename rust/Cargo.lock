@@ -1981,6 +1981,7 @@ name = "vss-server"
 version = "0.1.0"
 dependencies = [
  "api",
+ "auth-impls",
  "bytes",
  "http-body-util",
  "hyper 1.4.1",
