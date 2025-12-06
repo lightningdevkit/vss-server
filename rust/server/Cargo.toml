@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 api = { path = "../api" }
+auth-impls = { path = "../auth-impls" }
 impls = { path = "../impls" }
 
 hyper = { version = "1", default-features = false, features = ["server", "http1"] }
