@@ -147,11 +147,10 @@ impl PostgresPlaintextBackend {
 impl PostgresTlsBackend {
 	/// Constructs a [`PostgresTlsBackend`] using `postgres_endpoint` for PostgreSQL connection information.
 	pub async fn new(
-		postgres_endpoint: &str, default_db: &str, vss_db: &str,
-		additional_certificate: Option<Certificate>,
+		postgres_endpoint: &str, default_db: &str, vss_db: &str, certificate: Option<Certificate>,
 	) -> Result<Self, Error> {
 		let mut builder = TlsConnector::builder();
-		if let Some(cert) = additional_certificate {
+		if let Some(cert) = certificate {
 			builder.add_root_certificate(cert);
 		}
 		let connector = builder.build().map_err(|e| {
