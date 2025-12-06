@@ -3,13 +3,14 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub(crate) struct Config {
 	pub(crate) server_config: ServerConfig,
-	pub(crate) postgresql_config: Option<PostgreSQLConfig>,
+	pub(crate) postgresql_config: PostgreSQLConfig,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct ServerConfig {
 	pub(crate) host: String,
 	pub(crate) port: u16,
+	pub(crate) rsa_pub_file_path: Option<String>,
 }
 
 #[derive(Deserialize)]

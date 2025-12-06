@@ -131,7 +131,7 @@ fn main() {
 				};
 			Arc::new(postgres_plaintext_backend)
 		};
-		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, vss_db);
+		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
 
 		let rest_svc_listener =
 			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
