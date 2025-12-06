@@ -15,7 +15,9 @@ username = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POS
 password = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_PASSWORD`
 host = "localhost"
 port = 5432
-database = "postgres"
+# We first connect to `default_database` to create `vss_database` if it does not exist
+default_database = "postgres"
+vss_database = "vss"
 
 # [postgresql_config.tls]  # Uncomment to make TLS connections to the postgres database
 #

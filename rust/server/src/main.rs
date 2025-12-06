@@ -113,22 +113,27 @@ fn main() {
 		let postgresql_config =
 			postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
 		let endpoint = postgresql_config.to_postgresql_endpoint();
-		let db_name = postgresql_config.database;
+		let default_db = postgresql_config.default_database;
+		let vss_db = postgresql_config.vss_database;
 		let store: Arc<dyn KvStore> = if let Some(tls_config) = postgresql_config.tls {
-			let postgres_tls_backend =
-				match PostgresTlsBackend::new(&endpoint, &db_name, tls_config.crt_pem.as_deref())
-					.await
-				{
-					Ok(backend) => backend,
-					Err(e) => {
-						println!("Failed to start postgres tls backend: {}", e);
-						std::process::exit(-1);
-					},
-				};
+			let postgres_tls_backend = match PostgresTlsBackend::new(
+				&endpoint,
+				&default_db,
+				&vss_db,
+				tls_config.crt_pem.as_deref(),
+			)
+			.await
+			{
+				Ok(backend) => backend,
+				Err(e) => {
+					println!("Failed to start postgres tls backend: {}", e);
+					std::process::exit(-1);
+				},
+			};
 			Arc::new(postgres_tls_backend)
 		} else {
 			let postgres_plaintext_backend =
-				match PostgresPlaintextBackend::new(&endpoint, &db_name).await {
+				match PostgresPlaintextBackend::new(&endpoint, &default_db, &vss_db).await {
 					Ok(backend) => backend,
 					Err(e) => {
 						println!("Failed to start postgres plaintext backend: {}", e);
@@ -137,7 +142,7 @@ fn main() {
 				};
 			Arc::new(postgres_plaintext_backend)
 		};
-		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
+		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, vss_db);
 
 		let rest_svc_listener =
 			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
