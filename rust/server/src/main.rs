@@ -89,6 +89,8 @@ fn main() {
 			Arc::new(NoopAuthorizer {})
 		};
 
+		let postgresql_config =
+			postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
 		let endpoint = postgresql_config.to_postgresql_endpoint();
 		let db_name = postgresql_config.database;
 		let store: Arc<dyn KvStore> = if let Some(tls_config) = postgresql_config.tls {

@@ -3,7 +3,7 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub(crate) struct Config {
 	pub(crate) server_config: ServerConfig,
-	pub(crate) postgresql_config: PostgreSQLConfig,
+	pub(crate) postgresql_config: Option<PostgreSQLConfig>,
 }
 
 #[derive(Deserialize)]
