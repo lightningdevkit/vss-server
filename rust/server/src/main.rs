@@ -20,11 +20,14 @@ use hyper_util::rt::TokioIo;
 use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
+use auth_impls::{DecodingKey, JWTAuthorizer};
 use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
 use std::sync::Arc;
 
-pub(crate) mod util;
-pub(crate) mod vss_service;
+mod util;
+mod vss_service;
+
+use util::config::{Config, ServerConfig};
 
 fn main() {
 	let args: Vec<String> = std::env::args().collect();
@@ -33,22 +36,21 @@ fn main() {
 		std::process::exit(1);
 	}
 
-	let config = match util::config::load_config(&args[1]) {
-		Ok(cfg) => cfg,
-		Err(e) => {
-			eprintln!("Failed to load configuration: {}", e);
-			std::process::exit(1);
-		},
-	};
-
-	let addr: SocketAddr =
-		match format!("{}:{}", config.server_config.host, config.server_config.port).parse() {
-			Ok(addr) => addr,
+	let Config { server_config: ServerConfig { host, port, rsa_pub_file_path }, postgresql_config } =
+		match util::config::load_config(&args[1]) {
+			Ok(cfg) => cfg,
 			Err(e) => {
-				eprintln!("Invalid host/port configuration: {}", e);
+				eprintln!("Failed to load configuration: {}", e);
 				std::process::exit(1);
 			},
 		};
+	let addr: SocketAddr = match format!("{}:{}", host, port).parse() {
+		Ok(addr) => addr,
+		Err(e) => {
+			eprintln!("Invalid host/port configuration: {}", e);
+			std::process::exit(1);
+		},
+	};
 
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
@@ -66,9 +68,29 @@ fn main() {
 				std::process::exit(-1);
 			},
 		};
-		let authorizer: Arc<dyn Authorizer> = Arc::new(NoopAuthorizer {});
+
+		let authorizer: Arc<dyn Authorizer> = if let Some(file_path) = rsa_pub_file_path {
+			let rsa_pub_file = match std::fs::read(file_path) {
+				Ok(pem) => pem,
+				Err(e) => {
+					println!("Failed to read RSA public key file: {}", e);
+					std::process::exit(-1);
+				},
+			};
+			let rsa_public_key = match DecodingKey::from_rsa_pem(&rsa_pub_file) {
+				Ok(pem) => pem,
+				Err(e) => {
+					println!("Failed to parse RSA public key file: {}", e);
+					std::process::exit(-1);
+				},
+			};
+			Arc::new(JWTAuthorizer::new(rsa_public_key).await)
+		} else {
+			Arc::new(NoopAuthorizer {})
+		};
+
 		let postgresql_config =
-			config.postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
+			postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
 		let endpoint = postgresql_config.to_postgresql_endpoint();
 		let db_name = postgresql_config.database;
 		let store: Arc<dyn KvStore> = if let Some(tls_config) = postgresql_config.tls {
@@ -109,6 +131,7 @@ fn main() {
 			Arc::new(postgres_plaintext_backend)
 		};
 		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
+
 		let rest_svc_listener =
 			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
 		println!("Listening for incoming connections on {}", addr);
