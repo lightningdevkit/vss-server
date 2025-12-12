@@ -203,6 +203,9 @@ fn initialize_sentry(
 			config.get_environment().unwrap_or_else(|| "default".to_string()),
 			sample_rate
 		);
+
+		// Send a test message to verify Sentry is configured correctly
+		sentry::capture_message("VSS server started - Sentry integration test", sentry::Level::Info);
 	}
 
 	Some(guard)

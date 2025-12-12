@@ -58,6 +58,10 @@ impl Service<Request<Incoming>> for VssService {
 				"/listKeyVersions" => {
 					handle_request(store, authorizer, req, handle_list_object_request).await
 				},
+				"/testSentry" => {
+					// Test endpoint to verify Sentry integration
+					handle_test_sentry_request().await
+				},
 				_ => {
 					let error_msg = "Invalid request path.".as_bytes();
 					Ok(Response::builder()
@@ -89,6 +93,30 @@ async fn handle_list_object_request(
 	store: Arc<dyn KvStore>, user_token: String, request: ListKeyVersionsRequest,
 ) -> Result<ListKeyVersionsResponse, VssError> {
 	store.list_key_versions(user_token, request).await
+}
+
+/// Test endpoint to verify Sentry integration is working.
+/// Sends a test error event to Sentry and returns a confirmation message.
+async fn handle_test_sentry_request(
+) -> Result<<VssService as Service<Request<Incoming>>>::Response, hyper::Error> {
+	// Create a test error and capture it
+	let test_error = std::io::Error::new(
+		std::io::ErrorKind::Other,
+		"Test error from /vss/testSentry endpoint",
+	);
+	sentry::capture_error(&test_error);
+
+	// Also send a test message
+	sentry::capture_message(
+		"Test message from /vss/testSentry endpoint",
+		sentry::Level::Warning,
+	);
+
+	let response_body = b"Sentry test events sent. Check your Sentry dashboard.";
+	Ok(Response::builder()
+		.status(StatusCode::OK)
+		.body(Full::new(Bytes::from(response_body.to_vec())))
+		.unwrap())
 }
 async fn handle_request<
 	T: Message + Default,
