@@ -12,3 +12,10 @@ default_database = "postgres"
 vss_database = "vss"
 # tls = { }                        # Uncomment to make TLS connections to the postgres database using your machine's PKI
 # tls = { ca_file = "ca.pem" }     # Uncomment to make TLS connections to the postgres database with an additional root certificate
+
+# Sentry Configuration (optional)
+# Uncomment and configure to enable error tracking with Sentry
+# [sentry_config]
+# dsn = "https://your-sentry-dsn@sentry.io/project-id"  # Optional, can be overridden by env var `SENTRY_DSN`
+# environment = "development"                           # Optional, can be overridden by env var `SENTRY_ENVIRONMENT`
+# sample_rate = 1.0                                     # Optional, can be overridden by env var `SENTRY_SAMPLE_RATE` (0.0 to 1.0)

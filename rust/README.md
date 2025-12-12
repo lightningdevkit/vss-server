@@ -30,6 +30,27 @@ cargo build --release
 
 Refer to `./server/vss-server-config.toml` to see available configuration options.
 
+### Sentry Integration (Optional)
+
+VSS supports [Sentry](https://sentry.io) for error tracking and monitoring. To enable Sentry:
+
+1. **Via Configuration File**: Add the following to your `vss-server-config.toml`:
+   ```toml
+   [sentry_config]
+   dsn = "https://your-sentry-dsn@sentry.io/project-id"
+   environment = "production"  # Optional: e.g., "production", "staging", "development"
+   sample_rate = 1.0           # Optional: Value between 0.0 and 1.0 (default: 1.0)
+   ```
+
+2. **Via Environment Variables** (recommended for production):
+   - `SENTRY_DSN`: Your Sentry DSN
+   - `SENTRY_ENVIRONMENT`: Environment name (e.g., "production")
+   - `SENTRY_SAMPLE_RATE`: Sample rate for error events (0.0 to 1.0)
+
+   Environment variables take precedence over configuration file values.
+
+If no DSN is provided or the `sentry_config` section is omitted, Sentry will not be initialized.
+
 ### Support
 
 If you encounter any issues or have questions, feel free to open an issue on

@@ -3,7 +3,33 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub(crate) struct Config {
 	pub(crate) server_config: ServerConfig,
-	pub(crate) postgresql_config: PostgreSQLConfig,
+	pub(crate) postgresql_config: Option<PostgreSQLConfig>,
+	pub(crate) sentry_config: Option<SentryConfig>,
+}
+
+#[derive(Deserialize, Clone)]
+pub(crate) struct SentryConfig {
+	pub(crate) dsn: Option<String>, // Optional in TOML, can be overridden by env var `SENTRY_DSN`
+	pub(crate) environment: Option<String>, // e.g., "production", "staging", "development"
+	pub(crate) sample_rate: Option<f32>, // Value between 0.0 and 1.0, defaults to 1.0
+}
+
+impl SentryConfig {
+	pub(crate) fn get_dsn(&self) -> Option<String> {
+		std::env::var("SENTRY_DSN").ok().or_else(|| self.dsn.clone())
+	}
+
+	pub(crate) fn get_environment(&self) -> Option<String> {
+		std::env::var("SENTRY_ENVIRONMENT").ok().or_else(|| self.environment.clone())
+	}
+
+	pub(crate) fn get_sample_rate(&self) -> f32 {
+		std::env::var("SENTRY_SAMPLE_RATE")
+			.ok()
+			.and_then(|s| s.parse().ok())
+			.or(self.sample_rate)
+			.unwrap_or(1.0)
+	}
 }
 
 #[derive(Deserialize)]
