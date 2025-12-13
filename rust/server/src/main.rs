@@ -17,12 +17,14 @@ use tokio::signal::unix::SignalKind;
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 
+use crate::tracing::configure_tracer;
 use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
 use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
 use std::sync::Arc;
 
+pub(crate) mod tracing;
 pub(crate) mod util;
 pub(crate) mod vss_service;
 
@@ -59,6 +61,7 @@ fn main() {
 	};
 
 	runtime.block_on(async {
+		configure_tracer();
 		let mut sigterm_stream = match tokio::signal::unix::signal(SignalKind::terminate()) {
 			Ok(stream) => stream,
 			Err(e) => {

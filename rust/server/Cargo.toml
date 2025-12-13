@@ -15,3 +15,11 @@ prost = { version = "0.11.6", default-features = false, features = ["std"] }
 bytes = "1.4.0"
 serde = { version = "1.0.203", default-features = false, features = ["derive"] }
 toml = { version = "0.8.9", default-features = false, features = ["parse"] }
+
+tracing ={ version = "0.1.43" , default-features = false, features = ["log", "attributes"]}
+tracing-subscriber = {version = "0.3.22", default-features = false, features = ["std", "fmt", "json"]}
+tracing-opentelemetry ={ version = "0.32.0", default-features = false}
+opentelemetry ={ version = "0.31.0", default-features = false}
+opentelemetry_sdk ={ version = "0.31.0", default-features = false}
+opentelemetry-otlp ={ version = "0.31.0", default-features = false, features = ["trace", "grpc-tonic"]}
+opentelemetry-stdout = {version = "0.31.0"}
