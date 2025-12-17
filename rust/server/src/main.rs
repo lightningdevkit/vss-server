@@ -10,6 +10,7 @@
 #![deny(missing_docs)]
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
@@ -17,14 +18,15 @@ use tokio::signal::unix::SignalKind;
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 
-use crate::vss_service::VssService;
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
+use auth_impls::JWTAuthorizer;
 use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
-use std::sync::Arc;
+use util::config::{Config, ServerConfig};
+use vss_service::VssService;
 
-pub(crate) mod util;
-pub(crate) mod vss_service;
+mod util;
+mod vss_service;
 
 fn main() {
 	let args: Vec<String> = std::env::args().collect();
@@ -33,22 +35,21 @@ fn main() {
 		std::process::exit(1);
 	}
 
-	let config = match util::config::load_config(&args[1]) {
-		Ok(cfg) => cfg,
-		Err(e) => {
-			eprintln!("Failed to load configuration: {}", e);
-			std::process::exit(1);
-		},
-	};
-
-	let addr: SocketAddr =
-		match format!("{}:{}", config.server_config.host, config.server_config.port).parse() {
-			Ok(addr) => addr,
+	let Config { server_config: ServerConfig { host, port }, jwt_auth_config, postgresql_config } =
+		match util::config::load_config(&args[1]) {
+			Ok(cfg) => cfg,
 			Err(e) => {
-				eprintln!("Invalid host/port configuration: {}", e);
+				eprintln!("Failed to load configuration: {}", e);
 				std::process::exit(1);
 			},
 		};
+	let addr: SocketAddr = match format!("{}:{}", host, port).parse() {
+		Ok(addr) => addr,
+		Err(e) => {
+			eprintln!("Invalid host/port configuration: {}", e);
+			std::process::exit(1);
+		},
+	};
 
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
@@ -66,9 +67,33 @@ fn main() {
 				std::process::exit(-1);
 			},
 		};
-		let authorizer: Arc<dyn Authorizer> = Arc::new(NoopAuthorizer {});
+
+		let rsa_pem_env = match std::env::var("VSS_JWT_RSA_PEM") {
+			Ok(env) => Some(env),
+			Err(std::env::VarError::NotPresent) => None,
+			Err(e) => {
+				println!("Failed to load the VSS_JWT_RSA_PEM env var: {}", e);
+				std::process::exit(-1);
+			},
+		};
+		let rsa_pem = rsa_pem_env.or(jwt_auth_config.map(|config| config.rsa_pem));
+		let authorizer: Arc<dyn Authorizer> = if let Some(pem) = rsa_pem {
+			let authorizer = match JWTAuthorizer::new(pem.as_str()).await {
+				Ok(auth) => auth,
+				Err(e) => {
+					println!("Failed to parse the PEM formatted RSA public key: {}", e);
+					std::process::exit(-1);
+				},
+			};
+			println!("Configured JWT authorizer with RSA public key");
+			Arc::new(authorizer)
+		} else {
+			println!("No JWT authentication method configured");
+			Arc::new(NoopAuthorizer {})
+		};
+
 		let postgresql_config =
-			config.postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
+			postgresql_config.expect("PostgreSQLConfig must be defined in config file.");
 		let endpoint = postgresql_config.to_postgresql_endpoint();
 		let db_name = postgresql_config.database;
 		let store: Arc<dyn KvStore> = if let Some(tls_config) = postgresql_config.tls {
@@ -109,6 +134,7 @@ fn main() {
 			Arc::new(postgres_plaintext_backend)
 		};
 		println!("Connected to PostgreSQL backend with DSN: {}/{}", endpoint, db_name);
+
 		let rest_svc_listener =
 			TcpListener::bind(&addr).await.expect("Failed to bind listening port");
 		println!("Listening for incoming connections on {}", addr);
