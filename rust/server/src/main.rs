@@ -82,7 +82,7 @@ fn main() {
 					std::process::exit(-1);
 				},
 			};
-			let rsa_pem = rsa_pem_env.or(jwt_auth_config.map(|config| config.rsa_pem));
+			let rsa_pem = rsa_pem_env.or(jwt_auth_config.and_then(|config| config.rsa_pem));
 			if let Some(pem) = rsa_pem {
 				authorizer = match JWTAuthorizer::new(pem.as_str()).await {
 					Ok(auth) => {
@@ -90,7 +90,7 @@ fn main() {
 						Some(Arc::new(auth))
 					},
 					Err(e) => {
-						println!("Failed to parse the PEM formatted RSA public key: {}", e);
+						println!("Failed to configure JWT authorizer: {}", e);
 						std::process::exit(-1);
 					},
 				};

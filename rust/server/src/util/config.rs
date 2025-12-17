@@ -15,7 +15,7 @@ pub(crate) struct ServerConfig {
 
 #[derive(Deserialize)]
 pub(crate) struct JwtAuthConfig {
-	pub(crate) rsa_pem: String,
+	pub(crate) rsa_pem: Option<String>,
 }
 
 #[derive(Deserialize)]
