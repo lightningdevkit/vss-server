@@ -24,7 +24,7 @@ use api::kv_store::KvStore;
 use auth_impls::jwt::JWTAuthorizer;
 #[cfg(feature = "sigs")]
 use auth_impls::signature::SignatureValidatingAuthorizer;
-use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
+use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
 use util::config::{Config, ServerConfig};
 use vss_service::VssService;
 
@@ -115,24 +115,10 @@ fn main() {
 		let endpoint = postgresql_config.to_postgresql_endpoint();
 		let db_name = postgresql_config.database;
 		let store: Arc<dyn KvStore> = if let Some(tls_config) = postgresql_config.tls {
-			let additional_certificate = tls_config.ca_file.map(|file| {
-				let certificate = match std::fs::read(&file) {
-					Ok(cert) => cert,
-					Err(e) => {
-						println!("Failed to read certificate file: {}", e);
-						std::process::exit(-1);
-					},
-				};
-				match Certificate::from_pem(&certificate) {
-					Ok(cert) => cert,
-					Err(e) => {
-						println!("Failed to parse certificate file: {}", e);
-						std::process::exit(-1);
-					},
-				}
-			});
 			let postgres_tls_backend =
-				match PostgresTlsBackend::new(&endpoint, &db_name, additional_certificate).await {
+				match PostgresTlsBackend::new(&endpoint, &db_name, tls_config.crt_pem.as_deref())
+					.await
+				{
 					Ok(backend) => backend,
 					Err(e) => {
 						println!("Failed to start postgres tls backend: {}", e);

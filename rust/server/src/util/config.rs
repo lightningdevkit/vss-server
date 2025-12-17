@@ -30,7 +30,7 @@ pub(crate) struct PostgreSQLConfig {
 
 #[derive(Deserialize)]
 pub(crate) struct TlsConfig {
-	pub(crate) ca_file: Option<String>,
+	pub(crate) crt_pem: Option<String>,
 }
 
 impl PostgreSQLConfig {

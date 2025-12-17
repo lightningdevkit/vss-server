@@ -141,11 +141,17 @@ impl PostgresPlaintextBackend {
 impl PostgresTlsBackend {
 	/// Constructs a [`PostgresTlsBackend`] using `postgres_endpoint` for PostgreSQL connection information.
 	pub async fn new(
-		postgres_endpoint: &str, db_name: &str, additional_certificate: Option<Certificate>,
+		postgres_endpoint: &str, db_name: &str, crt_pem: Option<&str>,
 	) -> Result<Self, Error> {
 		let mut builder = TlsConnector::builder();
-		if let Some(cert) = additional_certificate {
-			builder.add_root_certificate(cert);
+		if let Some(pem) = crt_pem {
+			let crt = Certificate::from_pem(pem.as_bytes()).map_err(|e| {
+				Error::new(
+					ErrorKind::Other,
+					format!("Failed to parse the PEM formatted certificate: {}", e),
+				)
+			})?;
+			builder.add_root_certificate(crt);
 		}
 		let connector = builder.build().map_err(|e| {
 			Error::new(ErrorKind::Other, format!("Error building tls connector: {}", e))

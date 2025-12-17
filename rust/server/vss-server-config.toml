@@ -7,13 +7,6 @@ port = 8080
 # [jwt_auth_config]
 # rsa_pem = """
 # -----BEGIN PUBLIC KEY-----
-# MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAstPJs4ut+tFAI0qrOyGt
-# /3FN5jWc5gLv/j9Rc6lgr4hm7lyR05PU/G+4rfxdXGNyGTlQ6dRqcVy78CjxWz9f
-# 8l08EKLERPh8JhE5el6vr+ehWD5iQxSP3ejpx0Mr977fKMNKg6jlFiL+y50hOEp2
-# 6iN9QzZQjLxotDT3aQvbCA/DZpI+fV6WKDKWGS+pZGDVgOz5x/RcStJQXxkX3ACK
-# WhVdrtN3h6mHlhIt7ZIqVvQmY4NL03QPyljt13sYHoiFaoxINF/funBMCjrfSLcB
-# ko1rWE2BWdOrFqi27RtBs5AHOSAWXuz/2SUGpFuTQuJi7U68QUfjKeQO46JpQf+v
-# kQIDAQAB
 # -----END PUBLIC KEY-----
 # """
 
@@ -23,5 +16,12 @@ password = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POS
 host = "localhost"
 port = 5432
 database = "postgres"
-# tls = { }                        # Uncomment to make TLS connections to the postgres database using your machine's PKI
-# tls = { ca_file = "ca.pem" }     # Uncomment to make TLS connections to the postgres database with an additional root certificate
+
+# [postgresql_config.tls]  # Uncomment to make TLS connections to the postgres database
+#
+# Uncomment the lines below to add a root certificate to your trusted root certificates
+#
+# crt_pem = """
+# -----BEGIN CERTIFICATE-----
+# -----END CERTIFICATE-----
+# """
