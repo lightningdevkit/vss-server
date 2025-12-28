@@ -20,7 +20,8 @@ use hyper_util::rt::TokioIo;
 
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
-use auth_impls::JWTAuthorizer;
+#[cfg(feature = "jwt")]
+use auth_impls::jwt::JWTAuthorizer;
 use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
 use util::config::{Config, ServerConfig};
 use vss_service::VssService;
@@ -68,27 +69,35 @@ fn main() {
 			},
 		};
 
-		let rsa_pem_env = match std::env::var("VSS_JWT_RSA_PEM") {
-			Ok(env) => Some(env),
-			Err(std::env::VarError::NotPresent) => None,
-			Err(e) => {
-				println!("Failed to load the VSS_JWT_RSA_PEM env var: {}", e);
-				std::process::exit(-1);
-			},
-		};
-		let rsa_pem = rsa_pem_env.or(jwt_auth_config.map(|config| config.rsa_pem));
-		let authorizer: Arc<dyn Authorizer> = if let Some(pem) = rsa_pem {
-			let authorizer = match JWTAuthorizer::new(pem.as_str()).await {
-				Ok(auth) => auth,
+		let mut authorizer: Option<Arc<dyn Authorizer>> = None;
+		#[cfg(feature = "jwt")]
+		{
+			let rsa_pem_env = match std::env::var("VSS_JWT_RSA_PEM") {
+				Ok(env) => Some(env),
+				Err(std::env::VarError::NotPresent) => None,
 				Err(e) => {
-					println!("Failed to parse the PEM formatted RSA public key: {}", e);
+					println!("Failed to load the VSS_JWT_RSA_PEM env var: {}", e);
 					std::process::exit(-1);
 				},
 			};
-			println!("Configured JWT authorizer with RSA public key");
-			Arc::new(authorizer)
+			let rsa_pem = rsa_pem_env.or(jwt_auth_config.map(|config| config.rsa_pem));
+			if let Some(pem) = rsa_pem {
+				authorizer = match JWTAuthorizer::new(pem.as_str()).await {
+					Ok(auth) => {
+						println!("Configured JWT authorizer with RSA public key");
+						Some(Arc::new(auth))
+					},
+					Err(e) => {
+						println!("Failed to parse the PEM formatted RSA public key: {}", e);
+						std::process::exit(-1);
+					},
+				};
+			}
+		}
+		let authorizer = if let Some(auth) = authorizer {
+			auth
 		} else {
-			println!("No JWT authentication method configured");
+			println!("No authentication method configured, all storage will be comingled");
 			Arc::new(NoopAuthorizer {})
 		};
 

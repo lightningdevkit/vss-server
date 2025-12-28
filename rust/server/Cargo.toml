@@ -3,6 +3,10 @@ name = "vss-server"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+jwt = ["auth-impls/jwt"]
+default = [ "jwt" ]
+
 [dependencies]
 api = { path = "../api" }
 auth-impls = { path = "../auth-impls" }
