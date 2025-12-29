@@ -13,3 +13,6 @@
 
 #[cfg(feature = "jwt")]
 pub mod jwt;
+
+#[cfg(feature = "sigs")]
+pub mod signature;

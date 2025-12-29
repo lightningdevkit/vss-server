@@ -22,6 +22,8 @@ use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
 #[cfg(feature = "jwt")]
 use auth_impls::jwt::JWTAuthorizer;
+#[cfg(feature = "sigs")]
+use auth_impls::signature::SignatureValidatingAuthorizer;
 use impls::postgres_store::{Certificate, PostgresPlaintextBackend, PostgresTlsBackend};
 use util::config::{Config, ServerConfig};
 use vss_service::VssService;
@@ -94,10 +96,17 @@ fn main() {
 				};
 			}
 		}
+		#[cfg(feature = "sigs")]
+		{
+			if authorizer.is_none() {
+				println!("Configured signature-validating authorizer");
+				authorizer = Some(Arc::new(SignatureValidatingAuthorizer));
+			}
+		}
 		let authorizer = if let Some(auth) = authorizer {
 			auth
 		} else {
-			println!("No authentication method configured, all storage will be comingled");
+			println!("No authentication method configured, all storage with the same store id will be commingled.");
 			Arc::new(NoopAuthorizer {})
 		};
 

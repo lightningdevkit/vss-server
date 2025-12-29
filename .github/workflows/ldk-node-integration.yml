@@ -40,7 +40,7 @@ jobs:
         run: |
           cd vss-server/rust
           cargo build
-          cargo run server/vss-server-config.toml&
+          cargo run --no-default-features server/vss-server-config.toml&
       - name: Run LDK Node Integration tests
         run: |
           cd ldk-node
