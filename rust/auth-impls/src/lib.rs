@@ -41,9 +41,11 @@ pub(crate) struct Claims {
 const BEARER_PREFIX: &str = "Bearer ";
 
 impl JWTAuthorizer {
-	/// Create new instance of [`JWTAuthorizer`]
-	pub async fn new(jwt_issuer_key: DecodingKey) -> Self {
-		Self { jwt_issuer_key }
+	/// Creates a new instance of [`JWTAuthorizer`], fails on failure to parse the PEM formatted RSA public key
+	pub async fn new(rsa_pem: &str) -> Result<Self, String> {
+		let jwt_issuer_key =
+			DecodingKey::from_rsa_pem(rsa_pem.as_bytes()).map_err(|e| e.to_string())?;
+		Ok(Self { jwt_issuer_key })
 	}
 }
 
@@ -74,7 +76,7 @@ mod tests {
 	use crate::JWTAuthorizer;
 	use api::auth::Authorizer;
 	use api::error::VssError;
-	use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header};
+	use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 	use serde::{Deserialize, Serialize};
 	use std::collections::HashMap;
 	use std::time::SystemTime;
@@ -132,7 +134,7 @@ mod tests {
 		)
 		.expect("Failed to create Encoding Key.");
 
-		let decoding_key = DecodingKey::from_rsa_pem(
+		let decoding_key = String::from(
 			"-----BEGIN PUBLIC KEY-----\
 			MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAysGpKU+I9i9b+QZSANu/\
 			ExaA6w4qiQdFZaXeReiz49r1oDfABwKIFW9gK/kNnrnL9H8P+pYfj7jqUJ/glmgq\
@@ -141,12 +143,10 @@ mod tests {
 			8YsTa5piV8KgJpG/rwYTGXuu3lcCmnWwjmbeDq1zFFrCDDVkaIHkGJgRuFIDPXaH\
 			yUw5H2HvKlP94ySbvTDLXWZj6TyzHEHDbstqs4DgvurB/bIhi/dQ7zK3EIXL8KRB\
 			hwIDAQAB\
-			-----END PUBLIC KEY-----"
-				.as_bytes(),
-		)
-		.expect("Failed to create Decoding Key.");
+			-----END PUBLIC KEY-----",
+		);
 
-		let jwt_authorizer = JWTAuthorizer::new(decoding_key).await;
+		let jwt_authorizer = JWTAuthorizer::new(&decoding_key).await.unwrap();
 
 		let valid_jwt_token =
 			encode(&Header::new(Algorithm::RS256), &claims, &valid_encoding_key).unwrap();
