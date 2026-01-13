@@ -1,4 +1,4 @@
-use http_body_util::{BodyExt, Full};
+use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::{Bytes, Incoming};
 use hyper::service::Service;
 use hyper::{Request, Response, StatusCode};
@@ -17,6 +17,8 @@ use api::types::{
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+
+const MAXIMUM_REQUEST_BODY_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct VssService {
@@ -110,8 +112,17 @@ async fn handle_request<
 		Ok(auth_response) => auth_response.user_token,
 		Err(e) => return Ok(build_error_response(e)),
 	};
-	// TODO: we should bound the amount of data we read to avoid allocating too much memory.
-	let bytes = body.collect().await?.to_bytes();
+
+	let limited_body = Limited::new(body, MAXIMUM_REQUEST_BODY_SIZE.into());
+	let bytes = match limited_body.collect().await {
+		Ok(body) => body.to_bytes(),
+		Err(_) => {
+			return Ok(Response::builder()
+				.status(StatusCode::PAYLOAD_TOO_LARGE)
+				.body(Full::new(Bytes::from("Request body too large")))
+				.unwrap());
+		},
+	};
 	match T::decode(bytes) {
 		Ok(request) => match handler(store.clone(), user_token, request).await {
 			Ok(response) => Ok(Response::builder()
