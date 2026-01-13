@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 const BIND_ADDR_VAR: &str = "VSS_BIND_ADDRESS";
+const MAX_REQUEST_BODY_SIZE_VAR: &str = "VSS_MAX_REQUEST_BODY_SIZE";
 const LOG_FILE_VAR: &str = "VSS_LOG_FILE";
 const LOG_LEVEL_VAR: &str = "VSS_LOG_LEVEL";
 const JWT_RSA_PEM_VAR: &str = "VSS_JWT_RSA_PEM";
@@ -28,6 +29,7 @@ struct TomlConfig {
 #[derive(Deserialize)]
 struct ServerConfig {
 	bind_address: Option<SocketAddr>,
+	max_request_body_size: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -59,6 +61,7 @@ struct LogConfig {
 // Encapsulates the result of reading both the environment variables and the config file.
 pub(crate) struct Configuration {
 	pub(crate) bind_address: SocketAddr,
+	pub(crate) max_request_body_size: Option<usize>,
 	pub(crate) rsa_pem: Option<String>,
 	pub(crate) postgresql_prefix: String,
 	pub(crate) default_db: String,
@@ -99,6 +102,11 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 			None => TomlConfig::default(), // All fields are set to `None`
 		};
 
+	let (bind_address_config, max_request_body_size_config) = match server_config {
+		Some(c) => (c.bind_address, c.max_request_body_size),
+		None => (None, None),
+	};
+
 	let bind_address_env = read_env(BIND_ADDR_VAR)?
 		.map(|addr| {
 			addr.parse().map_err(|e| {
@@ -108,7 +116,7 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		.transpose()?;
 	let bind_address = read_config(
 		bind_address_env,
-		server_config.and_then(|c| c.bind_address),
+		bind_address_config,
 		"VSS server bind address",
 		BIND_ADDR_VAR,
 	)?;
@@ -140,6 +148,15 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		.transpose()?;
 	let log_file_config: Option<PathBuf> = log_config.and_then(|config| config.file);
 	let log_file = log_file_env.or(log_file_config).unwrap_or(PathBuf::from("vss.log"));
+
+	let max_request_body_size_env = read_env(MAX_REQUEST_BODY_SIZE_VAR)?
+		.map(|mrbs| {
+			mrbs.parse::<usize>().map_err(|e| {
+				format!("Unable to parse the maximum request body size environment variable: {}", e)
+			})
+		})
+		.transpose()?;
+	let max_request_body_size = max_request_body_size_env.or(max_request_body_size_config);
 
 	let rsa_pem_env = read_env(JWT_RSA_PEM_VAR)?;
 	let rsa_pem = rsa_pem_env.or(jwt_auth_config.and_then(|config| config.rsa_pem));
@@ -199,6 +216,7 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 
 	Ok(Configuration {
 		bind_address,
+		max_request_body_size,
 		log_file,
 		log_level,
 		rsa_pem,
