@@ -25,14 +25,41 @@ use crate::util::KeyValueVecKeyPrinter;
 const MAXIMUM_REQUEST_BODY_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Clone)]
+pub(crate) struct VssServiceConfig {
+	maximum_request_body_size: usize,
+}
+
+impl VssServiceConfig {
+	pub fn new(maximum_request_body_size: usize) -> Result<Self, String> {
+		if maximum_request_body_size > MAXIMUM_REQUEST_BODY_SIZE {
+			return Err(format!(
+				"Maximum request body size {} exceeds maximum {}",
+				maximum_request_body_size, MAXIMUM_REQUEST_BODY_SIZE
+			));
+		}
+
+		Ok(Self { maximum_request_body_size })
+	}
+}
+
+impl Default for VssServiceConfig {
+	fn default() -> Self {
+		Self { maximum_request_body_size: MAXIMUM_REQUEST_BODY_SIZE }
+	}
+}
+
+#[derive(Clone)]
 pub struct VssService {
 	store: Arc<dyn KvStore>,
 	authorizer: Arc<dyn Authorizer>,
+	config: VssServiceConfig,
 }
 
 impl VssService {
-	pub(crate) fn new(store: Arc<dyn KvStore>, authorizer: Arc<dyn Authorizer>) -> Self {
-		Self { store, authorizer }
+	pub(crate) fn new(
+		store: Arc<dyn KvStore>, authorizer: Arc<dyn Authorizer>, config: VssServiceConfig,
+	) -> Self {
+		Self { store, authorizer, config }
 	}
 }
 
@@ -47,22 +74,51 @@ impl Service<Request<Incoming>> for VssService {
 		let store = Arc::clone(&self.store);
 		let authorizer = Arc::clone(&self.authorizer);
 		let path = req.uri().path().to_owned();
+		let maximum_request_body_size = self.config.maximum_request_body_size;
 
 		Box::pin(async move {
 			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
 				"/getObject" => {
-					handle_request(store, authorizer, req, handle_get_object_request).await
+					handle_request(
+						store,
+						authorizer,
+						req,
+						maximum_request_body_size,
+						handle_get_object_request,
+					)
+					.await
 				},
 				"/putObjects" => {
-					handle_request(store, authorizer, req, handle_put_object_request).await
+					handle_request(
+						store,
+						authorizer,
+						req,
+						maximum_request_body_size,
+						handle_put_object_request,
+					)
+					.await
 				},
 				"/deleteObject" => {
-					handle_request(store, authorizer, req, handle_delete_object_request).await
+					handle_request(
+						store,
+						authorizer,
+						req,
+						maximum_request_body_size,
+						handle_delete_object_request,
+					)
+					.await
 				},
 				"/listKeyVersions" => {
-					handle_request(store, authorizer, req, handle_list_object_request).await
+					handle_request(
+						store,
+						authorizer,
+						req,
+						maximum_request_body_size,
+						handle_list_object_request,
+					)
+					.await
 				},
 				_ => {
 					let error_msg = "Invalid request path.".as_bytes();
@@ -142,7 +198,7 @@ async fn handle_request<
 	Fut: Future<Output = Result<R, VssError>> + Send,
 >(
 	store: Arc<dyn KvStore>, authorizer: Arc<dyn Authorizer>, request: Request<Incoming>,
-	handler: F,
+	maximum_request_body_size: usize, handler: F,
 ) -> Result<<VssService as Service<Request<Incoming>>>::Response, hyper::Error> {
 	let (parts, body) = request.into_parts();
 	let headers_map = parts
@@ -158,7 +214,7 @@ async fn handle_request<
 		Err(e) => return Ok(build_error_response(e)),
 	};
 
-	let limited_body = Limited::new(body, MAXIMUM_REQUEST_BODY_SIZE.into());
+	let limited_body = Limited::new(body, maximum_request_body_size);
 	let bytes = match limited_body.collect().await {
 		Ok(body) => body.to_bytes(),
 		Err(_) => {
