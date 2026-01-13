@@ -24,7 +24,7 @@ use auth_impls::jwt::JWTAuthorizer;
 #[cfg(feature = "sigs")]
 use auth_impls::signature::SignatureValidatingAuthorizer;
 use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
-use vss_service::VssService;
+use vss_service::{VssService, VssServiceConfig};
 
 mod util;
 mod vss_service;
@@ -132,7 +132,10 @@ fn main() {
 					match res {
 						Ok((stream, _)) => {
 							let io_stream = TokioIo::new(stream);
-							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer));
+							let vss_service_config = if let Some(req_body_size) = &config.maximum_request_body_size {
+								VssServiceConfig::new(*req_body_size)
+							} else {VssServiceConfig::default()};
+							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer), vss_service_config);
 							runtime.spawn(async move {
 								if let Err(err) = http1::Builder::new().serve_connection(io_stream, vss_service).await {
 									eprintln!("Failed to serve connection: {}", err);
