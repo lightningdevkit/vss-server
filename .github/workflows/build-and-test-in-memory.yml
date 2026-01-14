@@ -1,0 +1,70 @@
+name: In-Memory VSS Server CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-in-memory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create in-memory config
+        run: |
+          mkdir -p rust/server
+          cat > rust/server/vss-server-config.toml <<EOF
+          [server_config]
+          host = "127.0.0.1"
+          port = 8080
+          store_type = "in-memory"
+          EOF
+
+      - name: Build server
+        working-directory: rust
+        run: cargo build --release --bin vss-server
+
+      - name: Start VSS server
+        working-directory: rust
+        run: |
+          ./target/release/vss-server ./server/vss-server-config.toml --in-memory > server.log 2>&1 &
+          echo "Server PID: $!"
+
+      - name: Wait for server
+        run: |
+          for i in {1..15}; do
+            if curl -s http://127.0.0.1:8080 > /dev/null; then
+              echo "Server is up!"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed. Dumping log:"
+          cat rust/server.log
+          exit 1
+
+      - name: HTTP Smoke Test
+        run: |
+          sudo apt-get update && sudo apt-get install -y xxd
+
+          curl -f \
+               -H "Authorization: Bearer test_user" \
+               --data-binary @<(echo "0A04746573741A150A026B3110FFFFFFFFFFFFFFFFFF011A046B317631" | xxd -r -p) \
+               http://127.0.0.1:8080/vss/putObjects
+
+          RESPONSE=$(curl -f \
+               -H "Authorization: Bearer test_user" \
+               --data-binary @<(echo "0A047465737412026B31" | xxd -r -p) \
+               http://127.0.0.1:8080/vss/getObject)
+
+      - name: Run In-Memory unit tests
+        working-directory: rust
+        run: cargo test --package impls --lib -- in_memory_store::tests --nocapture
