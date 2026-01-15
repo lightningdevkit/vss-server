@@ -26,8 +26,15 @@ pub(crate) struct VssServiceConfig {
 }
 
 impl VssServiceConfig {
-	pub fn new(maximum_request_body_size: usize) -> Self {
-		Self { maximum_request_body_size: maximum_request_body_size.min(MAXIMUM_REQUEST_BODY_SIZE) }
+	pub fn new(maximum_request_body_size: usize) -> Result<Self, String> {
+		if maximum_request_body_size > MAXIMUM_REQUEST_BODY_SIZE {
+			return Err(format!(
+				"Request body size {} exceeds maximum {}",
+				maximum_request_body_size, MAXIMUM_REQUEST_BODY_SIZE
+			));
+		}
+
+		Ok(Self { maximum_request_body_size })
 	}
 }
 
@@ -41,12 +48,12 @@ impl Default for VssServiceConfig {
 pub struct VssService {
 	store: Arc<dyn KvStore>,
 	authorizer: Arc<dyn Authorizer>,
-	config: VssServiceConfig,
+	config: Arc<VssServiceConfig>,
 }
 
 impl VssService {
 	pub(crate) fn new(
-		store: Arc<dyn KvStore>, authorizer: Arc<dyn Authorizer>, config: VssServiceConfig,
+		store: Arc<dyn KvStore>, authorizer: Arc<dyn Authorizer>, config: Arc<VssServiceConfig>,
 	) -> Self {
 		Self { store, authorizer, config }
 	}

@@ -37,6 +37,16 @@ fn main() {
 			eprintln!("Failed to load configuration: {}", e);
 			std::process::exit(-1);
 		});
+	let vss_service_config = match &config.maximum_request_body_size {
+		Some(size) => match VssServiceConfig::new(*size) {
+			Ok(config) => Arc::new(config),
+			Err(e) => {
+				eprintln!("Configuration validation error: {}", e);
+				return;
+			},
+		},
+		None => Arc::new(VssServiceConfig::default()),
+	};
 
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
@@ -132,10 +142,7 @@ fn main() {
 					match res {
 						Ok((stream, _)) => {
 							let io_stream = TokioIo::new(stream);
-							let vss_service_config = if let Some(req_body_size) = &config.maximum_request_body_size {
-								VssServiceConfig::new(*req_body_size)
-							} else {VssServiceConfig::default()};
-							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer), vss_service_config);
+							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer), Arc::clone(&vss_service_config));
 							runtime.spawn(async move {
 								if let Err(err) = http1::Builder::new().serve_connection(io_stream, vss_service).await {
 									eprintln!("Failed to serve connection: {}", err);
