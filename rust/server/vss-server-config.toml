@@ -1,27 +1,27 @@
 [server_config]
-host = "127.0.0.1"
-port = 8080
+bind_address = "127.0.0.1:8080" # Optional in TOML, can be overridden by env var `VSS_BIND_ADDRESS`
 
 # Uncomment the table below to verify JWT tokens in the HTTP Authorization header against the given RSA public key,
 # can be overridden by env var `VSS_JWT_RSA_PEM`
 # [jwt_auth_config]
 # rsa_pem = """
 # -----BEGIN PUBLIC KEY-----
-# MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAstPJs4ut+tFAI0qrOyGt
-# /3FN5jWc5gLv/j9Rc6lgr4hm7lyR05PU/G+4rfxdXGNyGTlQ6dRqcVy78CjxWz9f
-# 8l08EKLERPh8JhE5el6vr+ehWD5iQxSP3ejpx0Mr977fKMNKg6jlFiL+y50hOEp2
-# 6iN9QzZQjLxotDT3aQvbCA/DZpI+fV6WKDKWGS+pZGDVgOz5x/RcStJQXxkX3ACK
-# WhVdrtN3h6mHlhIt7ZIqVvQmY4NL03QPyljt13sYHoiFaoxINF/funBMCjrfSLcB
-# ko1rWE2BWdOrFqi27RtBs5AHOSAWXuz/2SUGpFuTQuJi7U68QUfjKeQO46JpQf+v
-# kQIDAQAB
 # -----END PUBLIC KEY-----
 # """
 
 [postgresql_config]
-username = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_USERNAME`
-password = "postgres"  # Optional in TOML, can be overridden by env var `VSS_POSTGRESQL_PASSWORD`
-host = "localhost"
-port = 5432
-database = "postgres"
-# tls = { }                        # Uncomment to make TLS connections to the postgres database using your machine's PKI
-# tls = { ca_file = "ca.pem" }     # Uncomment to make TLS connections to the postgres database with an additional root certificate
+username = "postgres"          # Optional in TOML, can be overridden by env var `VSS_PSQL_USERNAME`
+password = "postgres"          # Optional in TOML, can be overridden by env var `VSS_PSQL_PASSWORD`
+address = "127.0.0.1:5432"     # Optional in TOML, can be overridden by env var `VSS_PSQL_ADDRESS`
+# We first connect to `default_database` to create `vss_database` if it does not exist
+default_database = "postgres"  # Optional in TOML, can be overridden by env var `VSS_PSQL_DEFAULT_DB`
+vss_database = "vss"           # Optional in TOML, can be overridden by env var `VSS_PSQL_VSS_DB`
+
+# [postgresql_config.tls]  # Uncomment, or set env var `VSS_PSQL_TLS` to make TLS connections to the postgres database
+#
+# Uncomment the lines below, or set `VSS_PSQL_CRT_PEM`, to add a root certificate to your trusted root certificates
+#
+# crt_pem = """
+# -----BEGIN CERTIFICATE-----
+# -----END CERTIFICATE-----
+# """

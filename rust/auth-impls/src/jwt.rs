@@ -34,8 +34,8 @@ const BEARER_PREFIX: &str = "Bearer ";
 impl JWTAuthorizer {
 	/// Creates a new instance of [`JWTAuthorizer`], fails on failure to parse the PEM formatted RSA public key
 	pub async fn new(rsa_pem: &str) -> Result<Self, String> {
-		let jwt_issuer_key =
-			DecodingKey::from_rsa_pem(rsa_pem.as_bytes()).map_err(|e| e.to_string())?;
+		let jwt_issuer_key = DecodingKey::from_rsa_pem(rsa_pem.as_bytes())
+			.map_err(|e| format!("Failed to parse the PEM formatted RSA public key: {}", e))?;
 		Ok(Self { jwt_issuer_key })
 	}
 }
