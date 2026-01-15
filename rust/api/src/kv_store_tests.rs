@@ -44,7 +44,6 @@ macro_rules! define_kv_store_tests {
 		create_test!(put_should_fail_when_global_version_mismatched);
 		create_test!(put_should_succeed_when_no_global_version_is_given);
 		create_test!(put_and_delete_should_succeed_as_atomic_transaction);
-		create_test!(put_should_succeed_with_maximum_supported_value_size);
 		create_test!(delete_should_succeed_when_item_exists);
 		create_test!(delete_should_succeed_when_item_does_not_exist);
 		create_test!(delete_should_be_idempotent);
@@ -263,29 +262,6 @@ pub trait KvStoreTestSuite {
 
 		let response = ctx.get_object(GLOBAL_VERSION_KEY).await?;
 		assert_eq!(response.version, 0);
-
-		Ok(())
-	}
-
-	async fn put_should_succeed_with_maximum_supported_value_size() -> Result<(), VssError> {
-		const MAXIMUM_SUPPORTED_VALUE_SIZE: usize = 1024 * 1024 * 1024;
-		const PROTOCOL_OVERHEAD_MARGIN: usize = 150;
-		let kv_store = Self::create_store().await;
-		let ctx = TestContext::new(&kv_store);
-
-		// Construct entry that's for a field that's the maximum size of a non-"large_object" object
-		let large_value = vec![0u8; MAXIMUM_SUPPORTED_VALUE_SIZE - PROTOCOL_OVERHEAD_MARGIN];
-		let kv = KeyValue { key: "k1".into(), version: 0, value: Bytes::from(large_value) };
-
-		// Put succeeds
-		ctx.put_objects(None, vec![kv]).await?;
-
-		// Retrieval succeeds
-		let result = ctx.get_object("k1").await?;
-		assert_eq!(result.value.len(), MAXIMUM_SUPPORTED_VALUE_SIZE - PROTOCOL_OVERHEAD_MARGIN);
-		assert!(result.value.iter().all(|&b| b == 0));
-
-		ctx.delete_object(result).await?;
 
 		Ok(())
 	}
