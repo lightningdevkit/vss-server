@@ -124,7 +124,7 @@ fn main() {
 			println!("Failed to bind listening port: {}", e);
 			std::process::exit(-1);
 		});
-		println!("Listening for incoming connections on {}", config.bind_address);
+		println!("Listening for incoming connections on {}{}", config.bind_address, crate::vss_service::BASE_PATH_PREFIX);
 
 		loop {
 			tokio::select! {
