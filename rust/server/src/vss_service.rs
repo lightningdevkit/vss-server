@@ -30,7 +30,7 @@ impl VssService {
 	}
 }
 
-const BASE_PATH_PREFIX: &str = "/vss";
+pub(crate) const BASE_PATH_PREFIX: &str = "/vss";
 
 impl Service<Request<Incoming>> for VssService {
 	type Response = Response<Full<Bytes>>;
