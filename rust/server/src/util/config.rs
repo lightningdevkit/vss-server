@@ -2,6 +2,7 @@ use serde::Deserialize;
 use std::net::SocketAddr;
 
 const BIND_ADDR_VAR: &str = "VSS_BIND_ADDRESS";
+const MAX_REQUEST_BODY_SIZE: &str = "VSS_MAX_REQUEST_BODY_SIZE";
 const JWT_RSA_PEM_VAR: &str = "VSS_JWT_RSA_PEM";
 const PSQL_USER_VAR: &str = "VSS_PSQL_USERNAME";
 const PSQL_PASS_VAR: &str = "VSS_PSQL_PASSWORD";
@@ -23,6 +24,7 @@ struct TomlConfig {
 #[derive(Deserialize)]
 struct ServerConfig {
 	bind_address: Option<SocketAddr>,
+	maximum_request_body_size: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -48,6 +50,7 @@ struct TlsConfig {
 // Encapsulates the result of reading both the environment variables and the config file.
 pub(crate) struct Configuration {
 	pub(crate) bind_address: SocketAddr,
+	pub(crate) maximum_request_body_size: Option<usize>,
 	pub(crate) rsa_pem: Option<String>,
 	pub(crate) postgresql_prefix: String,
 	pub(crate) default_db: String,
@@ -85,6 +88,11 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		None => TomlConfig::default(), // All fields are set to `None`
 	};
 
+	let (bind_address_config, max_request_body_size_config) = match server_config {
+		Some(c) => (c.bind_address, c.maximum_request_body_size),
+		None => (None, None),
+	};
+
 	let bind_address_env = read_env(BIND_ADDR_VAR)?
 		.map(|addr| {
 			addr.parse().map_err(|e| {
@@ -94,9 +102,23 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		.transpose()?;
 	let bind_address = read_config(
 		bind_address_env,
-		server_config.and_then(|c| c.bind_address),
+		bind_address_config,
 		"VSS server bind address",
 		BIND_ADDR_VAR,
+	)?;
+
+	let maximum_request_body_size_env = read_env(MAX_REQUEST_BODY_SIZE)?
+		.map(|mrbs| {
+			mrbs.parse::<usize>().map_err(|e| {
+				format!("Unable to parse the maximum request body size environment variable: {}", e)
+			})
+		})
+		.transpose()?;
+	let maximum_request_body_size = read_config(
+		maximum_request_body_size_env,
+		max_request_body_size_config,
+		"VSS server maximum request body size",
+		MAX_REQUEST_BODY_SIZE,
 	)?;
 
 	let rsa_pem_env = read_env(JWT_RSA_PEM_VAR)?;
@@ -155,5 +177,13 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 
 	let postgresql_prefix = format!("postgresql://{}:{}@{}", username, password, address);
 
-	Ok(Configuration { bind_address, rsa_pem, postgresql_prefix, default_db, vss_db, tls_config })
+	Ok(Configuration {
+		bind_address,
+		maximum_request_body_size: Some(maximum_request_body_size),
+		rsa_pem,
+		postgresql_prefix,
+		default_db,
+		vss_db,
+		tls_config,
+	})
 }

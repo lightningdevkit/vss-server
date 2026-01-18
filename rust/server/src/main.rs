@@ -24,7 +24,7 @@ use auth_impls::jwt::JWTAuthorizer;
 #[cfg(feature = "sigs")]
 use auth_impls::signature::SignatureValidatingAuthorizer;
 use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
-use vss_service::VssService;
+use vss_service::{VssService, VssServiceConfig};
 
 mod util;
 mod vss_service;
@@ -37,6 +37,16 @@ fn main() {
 			eprintln!("Failed to load configuration: {}", e);
 			std::process::exit(-1);
 		});
+	let vss_service_config = match &config.maximum_request_body_size {
+		Some(size) => match VssServiceConfig::new(*size) {
+			Ok(config) => Arc::new(config),
+			Err(e) => {
+				eprintln!("Configuration validation error: {}", e);
+				return;
+			},
+		},
+		None => Arc::new(VssServiceConfig::default()),
+	};
 
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
@@ -132,7 +142,7 @@ fn main() {
 					match res {
 						Ok((stream, _)) => {
 							let io_stream = TokioIo::new(stream);
-							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer));
+							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer), Arc::clone(&vss_service_config));
 							runtime.spawn(async move {
 								if let Err(err) = http1::Builder::new().serve_connection(io_stream, vss_service).await {
 									eprintln!("Failed to serve connection: {}", err);
