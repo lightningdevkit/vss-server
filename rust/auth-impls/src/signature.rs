@@ -140,7 +140,7 @@ mod tests {
 		token = token
 			.chars()
 			.enumerate()
-			.map(|(idx, c)| if idx == 33 * 2 + 10 || idx == 33 * 2 + 11 { '0' } else { c })
+			.map(|(idx, c)| if (33 * 2 + 10..33 * 2 + 15).contains(&idx) { '0' } else { c })
 			.collect();
 		headers_map.insert("Authorization".to_string(), token);
 		assert!(matches!(auth.verify(&headers_map).await.unwrap_err(), VssError::AuthError(_)));
@@ -150,7 +150,7 @@ mod tests {
 		token = token
 			.chars()
 			.enumerate()
-			.map(|(idx, c)| if idx == 10 || idx == 11 { '0' } else { c })
+			.map(|(idx, c)| if (10..15).contains(&idx) { '0' } else { c })
 			.collect();
 		headers_map.insert("Authorization".to_string(), token);
 		assert!(matches!(auth.verify(&headers_map).await.unwrap_err(), VssError::AuthError(_)));
