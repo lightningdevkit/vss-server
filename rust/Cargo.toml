@@ -3,6 +3,9 @@ resolver = "2"
 members = ["server", "api", "impls", "auth-impls"]
 default-members = ["server"]
 
+[workspace.package]
+rust-version = "1.85.0"
+
 [profile.release]
 panic = "abort"
 opt-level = 3

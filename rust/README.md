@@ -37,3 +37,6 @@ the [GitHub repository](https://github.com/lightningdevkit/vss-server/issues). F
 development of VSS, you can reach out to us in the [LDK Discord](https://discord.gg/5AcknnMfBw) in the `#vss` channel.
 
 [LDK Discord]: https://discord.gg/5AcknnMfBw
+
+### MSRV
+The Minimum Supported Rust Version (MSRV) is currently 1.85.0.

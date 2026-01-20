@@ -1,4 +1,4 @@
-name: Continuous Integration
+name: Ping Check
 
 on: [push, pull_request]
 
@@ -7,8 +7,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
+  ping-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ ubuntu-latest ]
+        toolchain: [ stable, 1.85.0 ] # 1.85.0 is the MSRV
+    runs-on: ${{ matrix.platform }}
 
     services:
       postgres:

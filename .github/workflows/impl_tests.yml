@@ -1,4 +1,4 @@
-name: LDK Node Integration Tests
+name: Implementation Tests
 
 on: [push, pull_request]
 
@@ -7,7 +7,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  test-postgres-backend:
     strategy:
       fail-fast: false
       matrix:
@@ -35,20 +35,8 @@ jobs:
         uses: actions/checkout@v3
         with:
           path: vss-server
-      - name: Checkout LDK Node
-        uses: actions/checkout@v3
-        with:
-          repository: lightningdevkit/ldk-node
-          path: ldk-node
 
-      - name: Build and Deploy VSS Server
+      - name: Run postgres backend test suite
         run: |
-          cd vss-server/rust
-          cargo build
-          cargo run --no-default-features server/vss-server-config.toml&
-      - name: Run LDK Node Integration tests
-        run: |
-          cd ldk-node
-          export TEST_VSS_BASE_URL="http://localhost:8080/vss"
-          RUSTFLAGS="--cfg vss_test" cargo test io::vss_store
-          RUSTFLAGS="--cfg vss_test" cargo test --test integration_tests_vss
+          cd vss-server/rust/impls
+          cargo test -- --test-threads=1
