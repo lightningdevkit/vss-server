@@ -1,5 +1,6 @@
 use crate::migrations::*;
 
+use crate::{VssDbRecord, LIST_KEY_VERSIONS_MAX_PAGE_SIZE, MAX_PUT_REQUEST_ITEM_COUNT};
 use api::error::VssError;
 use api::kv_store::{KvStore, GLOBAL_VERSION_KEY, INITIAL_RECORD_VERSION};
 use api::types::{
@@ -20,32 +21,9 @@ use tokio_postgres::{error, Client, NoTls, Socket, Transaction};
 
 pub use native_tls::Certificate;
 
-pub(crate) struct VssDbRecord {
-	pub(crate) user_token: String,
-	pub(crate) store_id: String,
-	pub(crate) key: String,
-	pub(crate) value: Vec<u8>,
-	pub(crate) version: i64,
-	pub(crate) created_at: chrono::DateTime<Utc>,
-	pub(crate) last_updated_at: chrono::DateTime<Utc>,
-}
 const KEY_COLUMN: &str = "key";
 const VALUE_COLUMN: &str = "value";
 const VERSION_COLUMN: &str = "version";
-
-/// The maximum number of key versions that can be returned in a single page.
-///
-/// This constant helps control memory and bandwidth usage for list operations,
-/// preventing overly large payloads. If the number of results exceeds this limit,
-/// the response will be paginated.
-pub const LIST_KEY_VERSIONS_MAX_PAGE_SIZE: i32 = 100;
-
-/// The maximum number of items allowed in a single `PutObjectRequest`.
-///
-/// Setting an upper bound on the number of items helps ensure that
-/// each request stays within acceptable memory and performance limits.
-/// Exceeding this value will result in request rejection through [`VssError::InvalidRequestError`].
-pub const MAX_PUT_REQUEST_ITEM_COUNT: usize = 1000;
 
 /// A [PostgreSQL](https://www.postgresql.org/) based backend implementation for VSS.
 pub struct PostgresBackend<T>
