@@ -12,6 +12,7 @@ bytes = "1.4.0"
 tokio = { version = "1.38.0", default-features = false, features = ["rt", "macros"] }
 native-tls = { version = "0.2.14", default-features = false }
 postgres-native-tls = { version = "0.5.2", default-features = false, features = ["runtime"] }
+log = { version = "0.4.29", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1.38.0", default-features = false, features = ["rt-multi-thread", "macros"] }
