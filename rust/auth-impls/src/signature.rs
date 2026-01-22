@@ -43,7 +43,7 @@ impl Authorizer for SignatureValidatingAuthorizer {
 		&self, headers_map: &HashMap<String, String>,
 	) -> Result<AuthResponse, VssError> {
 		let auth_header = headers_map
-			.get("Authorization")
+			.get("authorization")
 			.ok_or_else(|| VssError::AuthError("Authorization header not found.".to_string()))?;
 
 		if auth_header.len() <= (33 + 64) * 2 {
@@ -122,17 +122,17 @@ mod tests {
 
 		// Test a valid signature
 		let (token, pubkey) = build_token(now);
-		headers_map.insert("Authorization".to_string(), token);
+		headers_map.insert("authorization".to_string(), token);
 		assert_eq!(auth.verify(&headers_map).await.unwrap().user_token, format!("{pubkey:x}"));
 
 		// Test a signature too far in the future
 		let (token, _) = build_token(now + 60 * 60 * 24 + 10);
-		headers_map.insert("Authorization".to_string(), token);
+		headers_map.insert("authorization".to_string(), token);
 		assert!(matches!(auth.verify(&headers_map).await.unwrap_err(), VssError::AuthError(_)));
 
 		// Test a signature too far in the past
 		let (token, _) = build_token(now - 60 * 60 * 24 - 10);
-		headers_map.insert("Authorization".to_string(), token);
+		headers_map.insert("authorization".to_string(), token);
 		assert!(matches!(auth.verify(&headers_map).await.unwrap_err(), VssError::AuthError(_)));
 
 		// Test a token with an invalid signature
@@ -142,7 +142,7 @@ mod tests {
 			.enumerate()
 			.map(|(idx, c)| if (33 * 2 + 10..33 * 2 + 15).contains(&idx) { '0' } else { c })
 			.collect();
-		headers_map.insert("Authorization".to_string(), token);
+		headers_map.insert("authorization".to_string(), token);
 		assert!(matches!(auth.verify(&headers_map).await.unwrap_err(), VssError::AuthError(_)));
 
 		// Test a token with the wrong public key
@@ -152,7 +152,7 @@ mod tests {
 			.enumerate()
 			.map(|(idx, c)| if (10..15).contains(&idx) { '0' } else { c })
 			.collect();
-		headers_map.insert("Authorization".to_string(), token);
+		headers_map.insert("authorization".to_string(), token);
 		assert!(matches!(auth.verify(&headers_map).await.unwrap_err(), VssError::AuthError(_)));
 	}
 }
