@@ -17,6 +17,8 @@ use tokio::signal::unix::SignalKind;
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 
+use log::error;
+
 use api::auth::{Authorizer, NoopAuthorizer};
 use api::kv_store::KvStore;
 #[cfg(feature = "jwt")]
@@ -24,6 +26,7 @@ use auth_impls::jwt::JWTAuthorizer;
 #[cfg(feature = "sigs")]
 use auth_impls::signature::SignatureValidatingAuthorizer;
 use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
+use util::logger::ServerLogger;
 use vss_service::VssService;
 
 mod util;
@@ -38,6 +41,14 @@ fn main() {
 			std::process::exit(-1);
 		});
 
+	let logger = match ServerLogger::init(config.log_level, &config.log_file) {
+		Ok(logger) => logger,
+		Err(e) => {
+			eprintln!("Failed to initialize logger: {e}");
+			std::process::exit(-1);
+		},
+	};
+
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
 		Err(e) => {
@@ -47,6 +58,15 @@ fn main() {
 	};
 
 	runtime.block_on(async {
+		// Register SIGHUP handler for log rotation
+		let mut sighup_stream = match tokio::signal::unix::signal(SignalKind::hangup()) {
+			Ok(stream) => stream,
+			Err(e) => {
+				eprintln!("Failed to register SIGHUP handler: {e}");
+				std::process::exit(-1);
+			}
+		};
+
 		let mut sigterm_stream = match tokio::signal::unix::signal(SignalKind::terminate()) {
 			Ok(stream) => stream,
 			Err(e) => {
@@ -145,6 +165,11 @@ fn main() {
 				_ = tokio::signal::ctrl_c() => {
 					println!("Received CTRL-C, shutting down..");
 					break;
+				}
+				_ = sighup_stream.recv() => {
+					if let Err(e) = logger.reopen() {
+						error!("Failed to reopen log file on SIGHUP: {e}");
+					}
 				}
 				_ = sigterm_stream.recv() => {
 					println!("Received SIGTERM, shutting down..");
