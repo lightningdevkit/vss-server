@@ -19,7 +19,9 @@ use hyper_util::rt::TokioIo;
 
 use log::{error, info, warn};
 
-use api::auth::{Authorizer, NoopAuthorizer};
+use api::auth::Authorizer;
+#[cfg(noop_authorizer)]
+use api::auth::NoopAuthorizer;
 use api::kv_store::KvStore;
 #[cfg(feature = "jwt")]
 use auth_impls::jwt::JWTAuthorizer;
@@ -98,12 +100,20 @@ fn main() {
 				authorizer = Some(Arc::new(SignatureValidatingAuthorizer));
 			}
 		}
+
+		#[cfg(noop_authorizer)]
 		let authorizer = if let Some(auth) = authorizer {
 			auth
 		} else {
 			warn!("No authentication method configured, all storage with the same store id will be commingled.");
 			Arc::new(NoopAuthorizer {})
 		};
+
+		#[cfg(not(noop_authorizer))]
+		let authorizer = authorizer.unwrap_or_else(||  {
+			error!("No authentication method configured, please configure either `JWTAuthorizer` or `SignatureValidatingAuthorizer`");
+			std::process::exit(-1);
+		});
 
 		let store: Arc<dyn KvStore> = if let Some(crt_pem) = config.tls_config {
 			let postgres_tls_backend = PostgresTlsBackend::new(
