@@ -62,7 +62,7 @@ See the [VSS API contract] for details.
 
 ### Implementation
 
-Currently, VSS-server has a Rust-based implementation and is ready to use.
+VSS has a Rust-based implementation and is ready to use.
 [VSS-rust-client] is a Rust-based client with support for client-side encryption, key obfuscation, retry mechanisms, and
 LNURL-auth.
 VSS is also integrated with [LDK-node] v0.4.x as alpha support.
@@ -72,11 +72,10 @@ VSS is also integrated with [LDK-node] v0.4.x as alpha support.
 * **Build & Deploy**: Refer to language-specific folder for instructions related to building and deploying VSS.
 * **Hosting**: VSS can either be self-hosted or deployed in the cloud. If a service provider is hosting VSS for multiple
   users, it must be configured with **HTTPS**, **Authentication/Authorization**, and **rate-limiting**.
-* **Authentication and Authorization**: Currently, the VSS-server
-  supports [JWT](https://datatracker.ietf.org/doc/html/rfc7519)-based authentication and authorization, and can run
-  without authentication for local testing or in trusted setups. The VSS-rust-client supports LNURL-auth & JWT based
-  authentication and authorization. Switching to simple HTTP header authentication is straightforward by adding another
-  implementation. Note that the security of authentication heavily relies on using HTTPS for all requests.
+* **Authentication and Authorization**: VSS supports authentication via
+  [Proof-of-Private-Key-Knowledge](#Authentication) or [JWT](https://datatracker.ietf.org/doc/html/rfc7519).
+  The API also offers hooks for simple HTTP header-based authentication. Note that the security of authentication
+  heavily relies on using HTTPS for all requests.
 * **Scaling**: VSS itself is stateless and can be horizontally scaled easily. VSS can be configured to point to a
   PostgreSQL cluster, and further scaling considerations need to be addressed in the PostgreSQL cluster.
 * **Using with LDK-node**: [LDK-node] can be easily configured to run with VSS as primary storage. It is integrated in
@@ -95,6 +94,21 @@ VSS is also integrated with [LDK-node] v0.4.x as alpha support.
 * **Using with Other Applications**: VSS is designed to store application-related metadata. Clients can use
   the [VSS-rust-client] directly for this purpose. This can help provide a complete user data recovery solution for
   applications, as well as enable turn-key multi-device support in the future.
+
+### Authentication
+
+By default, VSS uses a simple authentication scheme whereby each client must provide a valid signature for a
+client-specified public key. The public key identifies the storage that belongs to the client. This scheme does
+not impose **any** restrictions on who can interact with VSS; it **only** ensures that each client can only
+access *their own* storage. Therefore, this scheme **must** be paired with a network-level gatekeeper to prevent
+unauthorized interactions with VSS.
+
+The other option offered is JWT authentication. This form of authentication validates whether a client should
+be given access to VSS, *and* which storage the client has access to. VSS only implements the verification half of this
+scheme, and users must provide their own JWT issuance service if this solution is chosen.
+
+Finally, there is an option to completely disable all forms of authentication to VSS. This option should *only* be
+used in local development and testing.
 
 ### Summary
 
