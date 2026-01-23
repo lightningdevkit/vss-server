@@ -16,4 +16,4 @@ panic = "abort"
 
 [workspace.lints.rust.unexpected_cfgs]
 level = "forbid"
-check-cfg = ['cfg(noop_authorizer)']
+check-cfg = ['cfg(noop_authorizer)', 'cfg(genproto)']
