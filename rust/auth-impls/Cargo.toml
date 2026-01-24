@@ -2,12 +2,21 @@
 name = "auth-impls"
 version = "0.1.0"
 edition = "2021"
+rust-version.workspace = true
+
+[features]
+jwt = [ "jsonwebtoken", "serde" ]
+sigs = [ "bitcoin_hashes", "hex-conservative", "secp256k1" ]
 
 [dependencies]
 async-trait = "0.1.77"
 api = { path = "../api" }
-jsonwebtoken = { version = "9.3.0", default-features = false, features = ["use_pem"] }
-serde = { version = "1.0.210", features = ["derive"] }
+jsonwebtoken = { version = "9.3.0", optional = true, default-features = false, features = ["use_pem"] }
+serde = { version = "1.0.210", optional = true, default-features = false, features = ["derive"] }
+
+bitcoin_hashes = { version = "0.19", optional = true, default-features = false }
+hex-conservative = { version = "1.0", optional = true, default-features = false }
+secp256k1 = { version = "0.31", optional = true, default-features = false, features = [ "global-context" ] }
 
 [dev-dependencies]
 tokio = { version = "1.38.0", default-features = false, features = ["rt-multi-thread", "macros"] }

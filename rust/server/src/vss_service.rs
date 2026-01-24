@@ -30,7 +30,7 @@ impl VssService {
 	}
 }
 
-const BASE_PATH_PREFIX: &str = "/vss";
+pub(crate) const BASE_PATH_PREFIX: &str = "/vss";
 
 impl Service<Request<Incoming>> for VssService {
 	type Response = Response<Full<Bytes>>;
@@ -131,8 +131,10 @@ async fn handle_request<
 	let headers_map = parts
 		.headers
 		.iter()
-		.map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or_default().to_string()))
+		// HeaderName converted to a string is in lowercase.
+		.map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_string()))
 		.collect::<HashMap<String, String>>();
+	debug_assert!(headers_map.keys().all(|key| key.chars().all(|c| !c.is_uppercase())));
 
 	let user_token = match authorizer.verify(&headers_map).await {
 		Ok(auth_response) => auth_response.user_token,

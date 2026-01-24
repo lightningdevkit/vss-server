@@ -2,15 +2,15 @@
 name = "impls"
 version = "0.1.0"
 edition = "2021"
+rust-version.workspace = true
 
 [dependencies]
 async-trait = "0.1.77"
 api = { path = "../api" }
 chrono = "0.4.38"
 tokio-postgres = { version = "0.7.12", features = ["with-chrono-0_4"] }
-bb8-postgres = "0.7"
 bytes = "1.4.0"
-tokio = { version = "1.38.0", default-features = false }
+tokio = { version = "1.38.0", default-features = false, features = ["rt", "macros"] }
 native-tls = { version = "0.2.14", default-features = false }
 postgres-native-tls = { version = "0.5.2", default-features = false, features = ["runtime"] }
 
