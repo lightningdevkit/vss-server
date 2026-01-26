@@ -6,6 +6,7 @@ This directory hosts the Rust-based implementation of the Versioned Storage Serv
 
 - Install Rust and Cargo (https://www.rust-lang.org/tools/install).
 - Install PostgreSQL 15 (https://www.postgresql.org/download/)
+- Install OpenSSL (used for TLS connections to the PostgreSQL backend: https://docs.rs/openssl/latest/openssl/#automatic)
 
 ### Building
 
@@ -18,11 +19,12 @@ cargo build --release
 
 ### Running
 1. **Edit Configuration**: Modify `./server/vss-server-config.toml` to set application configuration and
-   environment variables as needed. Add PostgreSQL endpoint configuration.
-2. Create table in PostgreSQL using `./impls/src/postgres/sql/`
+   environment variables as needed.
+2. VSS will setup a PostgreSQL database on first launch if it is not found. You can also manually create the database
+   using the statement at `./impls/src/postgres/sql/v0_create_vss_db.sql`.
 3. Start server:
    ```
-   cargo run -- server/vss-server-config.toml
+   cargo run server/vss-server-config.toml
    ```
 4. VSS endpoint should be reachable at `http://localhost:8080/vss`.
 
