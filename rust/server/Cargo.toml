@@ -22,3 +22,12 @@ prost = { version = "0.11.6", default-features = false, features = ["std"] }
 bytes = "1.4.0"
 serde = { version = "1.0.203", default-features = false, features = ["derive"] }
 toml = { version = "0.8.9", default-features = false, features = ["parse"] }
+log = { version = "0.4.29", default-features = false, features = ["std"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+rand = { version = "0.9.2", default-features = false }
+
+[target.'cfg(noop_authorizer)'.dependencies]
+api = { path = "../api", features = ["_test_utils"] }
+
+[lints]
+workspace = true

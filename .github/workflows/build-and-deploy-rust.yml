@@ -38,8 +38,8 @@ jobs:
       - name: Build and Deploy VSS Server
         run: |
           cd rust
-          cargo build
-          cargo run server/vss-server-config.toml&
+          RUSTFLAGS="--cfg noop_authorizer" cargo build --no-default-features
+          ./target/debug/vss-server server/vss-server-config.toml&
 
       - name: Hit endpoint to verify service is up
         run: |
@@ -47,8 +47,8 @@ jobs:
 
           # Put request with store='storeId' and key=k1
           hex=0A0773746F726549641A150A026B3110FFFFFFFFFFFFFFFFFF011A046B317631
-          curl --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/putObjects
+          curl -f --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/putObjects
 
           # Get request with store='storeId' and key=k1
           hex=0A0773746F7265496412026B31
-          curl --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/getObject
+          curl -f --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/getObject

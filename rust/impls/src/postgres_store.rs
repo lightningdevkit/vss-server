@@ -17,6 +17,8 @@ use tokio::sync::Mutex;
 use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use tokio_postgres::{error, Client, NoTls, Socket, Transaction};
 
+use log::{debug, info, warn};
+
 pub use native_tls::Certificate;
 
 pub(crate) struct VssDbRecord {
@@ -104,6 +106,7 @@ where
 
 	async fn ensure_connected(&self, client: &mut Client) -> Result<(), Error> {
 		if client.is_closed() || client.check_connection().await.is_err() {
+			debug!("Rotating connection to the postgres database");
 			let new_client =
 				make_db_connection(&self.endpoint, &self.db_name, self.tls.clone()).await?;
 			*client = new_client;
@@ -145,7 +148,7 @@ where
 	// Connection must be driven on a separate task, and will resolve when the client is dropped
 	tokio::spawn(async move {
 		if let Err(e) = connection.await {
-			eprintln!("Connection error: {}", e);
+			warn!("Connection error: {}", e);
 		}
 	});
 	Ok(client)
@@ -173,7 +176,7 @@ where
 		client.execute(&stmt, &[]).await.map_err(|e| {
 			Error::new(ErrorKind::Other, format!("Failed to create database {}: {}", db_name, e))
 		})?;
-		println!("Created database {}", db_name);
+		info!("Created database {}", db_name);
 	}
 
 	Ok(())
@@ -291,7 +294,7 @@ where
 			panic!("We do not allow downgrades");
 		}
 
-		println!("Applying migration(s) {} through {}", migration_start, migrations.len() - 1);
+		info!("Applying migration(s) {} through {}", migration_start, migrations.len() - 1);
 
 		for (idx, &stmt) in (&migrations[migration_start..]).iter().enumerate() {
 			let _num_rows = tx.execute(stmt, &[]).await.map_err(|e| {

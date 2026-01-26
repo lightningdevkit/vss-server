@@ -44,8 +44,8 @@ jobs:
       - name: Build and Deploy VSS Server
         run: |
           cd vss-server/rust
-          cargo build
-          cargo run --no-default-features server/vss-server-config.toml&
+          RUSTFLAGS="--cfg noop_authorizer" cargo build --no-default-features
+          ./target/debug/vss-server server/vss-server-config.toml&
       - name: Run LDK Node Integration tests
         run: |
           cd ldk-node

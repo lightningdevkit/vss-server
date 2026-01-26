@@ -1,7 +1,11 @@
+use log::LevelFilter;
 use serde::Deserialize;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 const BIND_ADDR_VAR: &str = "VSS_BIND_ADDRESS";
+const LOG_FILE_VAR: &str = "VSS_LOG_FILE";
+const LOG_LEVEL_VAR: &str = "VSS_LOG_LEVEL";
 const JWT_RSA_PEM_VAR: &str = "VSS_JWT_RSA_PEM";
 const PSQL_USER_VAR: &str = "VSS_PSQL_USERNAME";
 const PSQL_PASS_VAR: &str = "VSS_PSQL_PASSWORD";
@@ -16,6 +20,7 @@ const PSQL_CERT_PEM_VAR: &str = "VSS_PSQL_CRT_PEM";
 #[derive(Deserialize, Default)]
 struct TomlConfig {
 	server_config: Option<ServerConfig>,
+	log_config: Option<LogConfig>,
 	jwt_auth_config: Option<JwtAuthConfig>,
 	postgresql_config: Option<PostgreSQLConfig>,
 }
@@ -45,6 +50,12 @@ struct TlsConfig {
 	crt_pem: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct LogConfig {
+	level: Option<String>,
+	file: Option<PathBuf>,
+}
+
 // Encapsulates the result of reading both the environment variables and the config file.
 pub(crate) struct Configuration {
 	pub(crate) bind_address: SocketAddr,
@@ -53,6 +64,8 @@ pub(crate) struct Configuration {
 	pub(crate) default_db: String,
 	pub(crate) vss_db: String,
 	pub(crate) tls_config: Option<Option<String>>,
+	pub(crate) log_file: PathBuf,
+	pub(crate) log_level: LevelFilter,
 }
 
 #[inline]
@@ -75,15 +88,16 @@ fn read_config<'a, T: std::fmt::Display>(
 }
 
 pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Configuration, String> {
-	let TomlConfig { server_config, jwt_auth_config, postgresql_config } = match config_file_path {
-		Some(path) => {
-			let config_file = std::fs::read_to_string(path)
-				.map_err(|e| format!("Failed to read configuration file: {}", e))?;
-			toml::from_str(&config_file)
-				.map_err(|e| format!("Failed to parse configuration file: {}", e))?
-		},
-		None => TomlConfig::default(), // All fields are set to `None`
-	};
+	let TomlConfig { server_config, log_config, jwt_auth_config, postgresql_config } =
+		match config_file_path {
+			Some(path) => {
+				let config_file = std::fs::read_to_string(path)
+					.map_err(|e| format!("Failed to read configuration file: {}", e))?;
+				toml::from_str(&config_file)
+					.map_err(|e| format!("Failed to parse configuration file: {}", e))?
+			},
+			None => TomlConfig::default(), // All fields are set to `None`
+		};
 
 	let bind_address_env = read_env(BIND_ADDR_VAR)?
 		.map(|addr| {
@@ -98,6 +112,34 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		"VSS server bind address",
 		BIND_ADDR_VAR,
 	)?;
+
+	let log_level_env: Option<LevelFilter> = read_env(LOG_LEVEL_VAR)?
+		.map(|level_str| {
+			level_str
+				.parse()
+				.map_err(|e| format!("Unable to parse the log level environment variable: {}", e))
+		})
+		.transpose()?;
+	let log_level_config: Option<LevelFilter> = log_config
+		.as_ref()
+		.and_then(|config| config.level.as_ref())
+		.map(|level_str| {
+			level_str
+				.parse()
+				.map_err(|e| format!("Unable to parse the log level config variable: {}", e))
+		})
+		.transpose()?;
+	let log_level = log_level_env.or(log_level_config).unwrap_or(LevelFilter::Debug);
+
+	let log_file_env: Option<PathBuf> = read_env(LOG_FILE_VAR)?
+		.map(|file_str| {
+			file_str
+				.parse()
+				.map_err(|e| format!("Unable to parse the log file environment variable: {}", e))
+		})
+		.transpose()?;
+	let log_file_config: Option<PathBuf> = log_config.and_then(|config| config.file);
+	let log_file = log_file_env.or(log_file_config).unwrap_or(PathBuf::from("vss.log"));
 
 	let rsa_pem_env = read_env(JWT_RSA_PEM_VAR)?;
 	let rsa_pem = rsa_pem_env.or(jwt_auth_config.and_then(|config| config.rsa_pem));
@@ -155,5 +197,14 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 
 	let postgresql_prefix = format!("postgresql://{}:{}@{}", username, password, address);
 
-	Ok(Configuration { bind_address, rsa_pem, postgresql_prefix, default_db, vss_db, tls_config })
+	Ok(Configuration {
+		bind_address,
+		log_file,
+		log_level,
+		rsa_pem,
+		postgresql_prefix,
+		default_db,
+		vss_db,
+		tls_config,
+	})
 }

@@ -17,13 +17,18 @@ use tokio::signal::unix::SignalKind;
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 
-use api::auth::{Authorizer, NoopAuthorizer};
+use log::{error, info, warn};
+
+use api::auth::Authorizer;
+#[cfg(noop_authorizer)]
+use api::auth::NoopAuthorizer;
 use api::kv_store::KvStore;
 #[cfg(feature = "jwt")]
 use auth_impls::jwt::JWTAuthorizer;
 #[cfg(feature = "sigs")]
 use auth_impls::signature::SignatureValidatingAuthorizer;
 use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
+use util::logger::ServerLogger;
 use vss_service::VssService;
 
 mod util;
@@ -38,19 +43,36 @@ fn main() {
 			std::process::exit(-1);
 		});
 
+	let logger = match ServerLogger::init(config.log_level, &config.log_file) {
+		Ok(logger) => logger,
+		Err(e) => {
+			eprintln!("Failed to initialize logger: {e}");
+			std::process::exit(-1);
+		},
+	};
+
 	let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
 		Ok(runtime) => Arc::new(runtime),
 		Err(e) => {
-			eprintln!("Failed to setup tokio runtime: {}", e);
+			error!("Failed to setup tokio runtime: {}", e);
 			std::process::exit(-1);
 		},
 	};
 
 	runtime.block_on(async {
+		// Register SIGHUP handler for log rotation
+		let mut sighup_stream = match tokio::signal::unix::signal(SignalKind::hangup()) {
+			Ok(stream) => stream,
+			Err(e) => {
+				error!("Failed to register SIGHUP handler: {e}");
+				std::process::exit(-1);
+			}
+		};
+
 		let mut sigterm_stream = match tokio::signal::unix::signal(SignalKind::terminate()) {
 			Ok(stream) => stream,
 			Err(e) => {
-				println!("Failed to register for SIGTERM stream: {}", e);
+				error!("Failed to register for SIGTERM stream: {}", e);
 				std::process::exit(-1);
 			},
 		};
@@ -61,11 +83,11 @@ fn main() {
 			if let Some(rsa_pem) = config.rsa_pem {
 				authorizer = match JWTAuthorizer::new(&rsa_pem).await {
 					Ok(auth) => {
-						println!("Configured JWT authorizer with RSA public key");
+						info!("Configured JWT authorizer with RSA public key");
 						Some(Arc::new(auth))
 					},
 					Err(e) => {
-						println!("Failed to configure JWT authorizer: {}", e);
+						error!("Failed to configure JWT authorizer: {}", e);
 						std::process::exit(-1);
 					},
 				};
@@ -74,16 +96,24 @@ fn main() {
 		#[cfg(feature = "sigs")]
 		{
 			if authorizer.is_none() {
-				println!("Configured signature-validating authorizer");
+				info!("Configured signature-validating authorizer");
 				authorizer = Some(Arc::new(SignatureValidatingAuthorizer));
 			}
 		}
+
+		#[cfg(noop_authorizer)]
 		let authorizer = if let Some(auth) = authorizer {
 			auth
 		} else {
-			println!("No authentication method configured, all storage with the same store id will be commingled.");
+			warn!("No authentication method configured, all storage with the same store id will be commingled.");
 			Arc::new(NoopAuthorizer {})
 		};
+
+		#[cfg(not(noop_authorizer))]
+		let authorizer = authorizer.unwrap_or_else(||  {
+			error!("No authentication method configured, please configure either `JWTAuthorizer` or `SignatureValidatingAuthorizer`");
+			std::process::exit(-1);
+		});
 
 		let store: Arc<dyn KvStore> = if let Some(crt_pem) = config.tls_config {
 			let postgres_tls_backend = PostgresTlsBackend::new(
@@ -94,10 +124,10 @@ fn main() {
 			)
 			.await
 			.unwrap_or_else(|e| {
-				println!("Failed to start postgres TLS backend: {}", e);
+				error!("Failed to start postgres TLS backend: {}", e);
 				std::process::exit(-1);
 			});
-			println!(
+			info!(
 				"Connected to PostgreSQL TLS backend with DSN: {}/{}",
 				config.postgresql_prefix, config.vss_db
 			);
@@ -110,10 +140,10 @@ fn main() {
 			)
 			.await
 			.unwrap_or_else(|e| {
-				println!("Failed to start postgres plaintext backend: {}", e);
+				error!("Failed to start postgres plaintext backend: {}", e);
 				std::process::exit(-1);
 			});
-			println!(
+			info!(
 				"Connected to PostgreSQL plaintext backend with DSN: {}/{}",
 				config.postgresql_prefix, config.vss_db
 			);
@@ -121,10 +151,10 @@ fn main() {
 		};
 
 		let rest_svc_listener = TcpListener::bind(&config.bind_address).await.unwrap_or_else(|e| {
-			println!("Failed to bind listening port: {}", e);
+			error!("Failed to bind listening port: {}", e);
 			std::process::exit(-1);
 		});
-		println!("Listening for incoming connections on {}{}", config.bind_address, crate::vss_service::BASE_PATH_PREFIX);
+		info!("Listening for incoming connections on {}{}", config.bind_address, crate::vss_service::BASE_PATH_PREFIX);
 
 		loop {
 			tokio::select! {
@@ -135,19 +165,24 @@ fn main() {
 							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer));
 							runtime.spawn(async move {
 								if let Err(err) = http1::Builder::new().serve_connection(io_stream, vss_service).await {
-									eprintln!("Failed to serve connection: {}", err);
+									warn!("Failed to serve connection: {}", err);
 								}
 							});
 						},
-						Err(e) => eprintln!("Failed to accept connection: {}", e),
+						Err(e) => warn!("Failed to accept connection: {}", e),
 					}
 				}
 				_ = tokio::signal::ctrl_c() => {
-					println!("Received CTRL-C, shutting down..");
+					info!("Received CTRL-C, shutting down..");
 					break;
 				}
+				_ = sighup_stream.recv() => {
+					if let Err(e) = logger.reopen() {
+						error!("Failed to reopen log file on SIGHUP: {e}");
+					}
+				}
 				_ = sigterm_stream.recv() => {
-					println!("Received SIGTERM, shutting down..");
+					info!("Received SIGTERM, shutting down..");
 					break;
 				}
 			}

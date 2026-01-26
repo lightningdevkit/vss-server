@@ -13,3 +13,7 @@ lto = true
 
 [profile.dev]
 panic = "abort"
+
+[workspace.lints.rust.unexpected_cfgs]
+level = "forbid"
+check-cfg = ['cfg(noop_authorizer)']

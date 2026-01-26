@@ -19,9 +19,13 @@ vss_database = "vss"           # Optional in TOML, can be overridden by env var 
 
 # [postgresql_config.tls]  # Uncomment, or set env var `VSS_PSQL_TLS` to make TLS connections to the postgres database
 #
-# Uncomment the lines below, or set `VSS_PSQL_CRT_PEM`, to add a root certificate to your trusted root certificates
+# Uncomment the lines below, or set `VSS_PSQL_CRT_PEM` to add a root certificate to your trusted root certificates
 #
 # crt_pem = """
 # -----BEGIN CERTIFICATE-----
 # -----END CERTIFICATE-----
 # """
+
+# [log_config]
+# level = "debug"    # Uncomment, or set env var `VSS_LOG_LEVEL` to set the log level, the default is "debug"
+# file = "vss.log"   # Uncomment, or set env var `VSS_LOG_FILE` to set the log file path, the default is "vss.log"

@@ -1,7 +1,6 @@
 use crate::error::VssError;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::string::ToString;
 
 /// Response returned for [`Authorizer`] request if user is authenticated and authorized.
 #[derive(Debug, Clone)]
@@ -21,10 +20,13 @@ pub trait Authorizer: Send + Sync {
 }
 
 /// A no-operation authorizer, which lets any user-request go through.
+#[cfg(feature = "_test_utils")]
 pub struct NoopAuthorizer {}
 
+#[cfg(feature = "_test_utils")]
 const UNAUTHENTICATED_USER: &str = "unauth-user";
 
+#[cfg(feature = "_test_utils")]
 #[async_trait]
 impl Authorizer for NoopAuthorizer {
 	async fn verify(
