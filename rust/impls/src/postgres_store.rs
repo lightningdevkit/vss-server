@@ -695,7 +695,6 @@ where
 }
 
 #[cfg(test)]
-
 mod tests {
 	use super::{drop_database, DUMMY_MIGRATION, MIGRATIONS};
 	use crate::postgres_store::PostgresPlaintextBackend;

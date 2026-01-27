@@ -24,7 +24,7 @@ use crate::util::KeyValueVecKeyPrinter;
 
 const MAXIMUM_REQUEST_BODY_SIZE: usize = 1024 * 1024 * 1024;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(crate) struct VssServiceConfig {
 	maximum_request_body_size: usize,
 }
