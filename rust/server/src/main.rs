@@ -42,7 +42,7 @@ fn main() {
 			eprintln!("Failed to load configuration: {}", e);
 			std::process::exit(-1);
 		});
-	let vss_service_config = match &config.maximum_request_body_size {
+	let vss_service_config = match &config.max_request_body_size {
 		Some(size) => match VssServiceConfig::new(*size) {
 			Ok(config) => config,
 			Err(e) => {
@@ -172,7 +172,7 @@ fn main() {
 					match res {
 						Ok((stream, _)) => {
 							let io_stream = TokioIo::new(stream);
-							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer), vss_service_config.clone());
+							let vss_service = VssService::new(Arc::clone(&store), Arc::clone(&authorizer), vss_service_config);
 							runtime.spawn(async move {
 								if let Err(err) = http1::Builder::new().serve_connection(io_stream, vss_service).await {
 									warn!("Failed to serve connection: {}", err);
