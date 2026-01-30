@@ -699,6 +699,10 @@ mod tests {
 	use super::{drop_database, DUMMY_MIGRATION, MIGRATIONS};
 	use crate::postgres_store::PostgresPlaintextBackend;
 	use api::define_kv_store_tests;
+	use api::kv_store::KvStore;
+	use api::types::{DeleteObjectRequest, GetObjectRequest, KeyValue, PutObjectRequest};
+
+	use bytes::Bytes;
 	use tokio::sync::OnceCell;
 	use tokio_postgres::NoTls;
 
@@ -811,6 +815,72 @@ mod tests {
 			let version = store.get_schema_version().await;
 			assert_eq!(version, MIGRATIONS_END + 3);
 		}
+
+		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn supports_objects_up_to_non_large_object_threshold() {
+		let vss_db = "supports_objects_up_to_non_large_object_threshold";
+		let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
+
+		const MAXIMUM_SUPPORTED_VALUE_SIZE: usize = 1024 * 1024 * 1024;
+		const PROTOCOL_OVERHEAD_MARGIN: usize = 150;
+
+		// Construct entry that's for a field that's the maximum size of a non-"large_object" object
+		let large_value = vec![0u8; MAXIMUM_SUPPORTED_VALUE_SIZE - PROTOCOL_OVERHEAD_MARGIN];
+		let kv = KeyValue { key: "k1".into(), version: 0, value: Bytes::from(large_value) };
+
+		{
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
+			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
+			assert_eq!(start, MIGRATIONS_START);
+			assert_eq!(end, MIGRATIONS_END);
+			assert_eq!(store.get_upgrades_list().await, [MIGRATIONS_START]);
+			assert_eq!(store.get_schema_version().await, MIGRATIONS_END);
+
+			// Round trip with non-large_object of threshold size
+
+			store
+				.put(
+					"token".to_string(),
+					PutObjectRequest {
+						store_id: "store_id".to_string(),
+						global_version: None,
+						transaction_items: vec![kv],
+						delete_items: vec![],
+					},
+				)
+				.await
+				.unwrap();
+
+			let resp_kv = store
+				.get(
+					"token".to_string(),
+					GetObjectRequest { store_id: "store_id".to_string(), key: "k1".to_string() },
+				)
+				.await
+				.unwrap()
+				.value
+				.unwrap();
+			assert_eq!(
+				resp_kv.value.len(),
+				MAXIMUM_SUPPORTED_VALUE_SIZE - PROTOCOL_OVERHEAD_MARGIN
+			);
+			assert!(resp_kv.value.iter().all(|&b| b == 0));
+
+			store
+				.delete(
+					"token".to_string(),
+					DeleteObjectRequest {
+						store_id: "store_id".to_string(),
+						key_value: Some(resp_kv),
+					},
+				)
+				.await
+				.unwrap();
+		};
 
 		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
 	}
