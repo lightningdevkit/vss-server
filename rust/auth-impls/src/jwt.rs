@@ -5,8 +5,11 @@
 use api::auth::{AuthResponse, Authorizer};
 use api::error::VssError;
 use async_trait::async_trait;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use base64::Engine;
+use rsa::sha2::{Digest, Sha256};
+use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
+use serde::Deserialize;
 use std::collections::HashMap;
 
 /// A JWT based authorizer, only allows requests with verified 'JsonWebToken' signed by the given
@@ -14,13 +17,13 @@ use std::collections::HashMap;
 ///
 /// Refer: https://datatracker.ietf.org/doc/html/rfc7519
 pub struct JWTAuthorizer {
-	jwt_issuer_key: DecodingKey,
+	jwt_issuer_key: RsaPublicKey,
 }
 
 /// A set of Claims claimed by 'JsonWebToken'
 ///
 /// Refer: https://datatracker.ietf.org/doc/html/rfc7519#section-4
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub(crate) struct Claims {
 	/// The "sub" (subject) claim identifies the principal that is the subject of the JWT.
 	/// The claims in a JWT are statements about the subject. This can be used as user identifier.
@@ -31,10 +34,22 @@ pub(crate) struct Claims {
 
 const BEARER_PREFIX: &str = "Bearer ";
 
+fn parse_public_key_pem(pem: &str) -> Result<RsaPublicKey, String> {
+	let body = pem
+		.trim()
+		.strip_prefix("-----BEGIN PUBLIC KEY-----")
+		.ok_or(String::from("Prefix not found"))?
+		.strip_suffix("-----END PUBLIC KEY-----")
+		.ok_or(String::from("Suffix not found"))?;
+	let body: String = body.lines().map(|line| line.trim()).collect();
+	let body = STANDARD.decode(body).map_err(|_| String::from("Base64 decode failed"))?;
+	RsaPublicKey::from_public_key_der(&body).map_err(|_| String::from("DER decode failed"))
+}
+
 impl JWTAuthorizer {
 	/// Creates a new instance of [`JWTAuthorizer`], fails on failure to parse the PEM formatted RSA public key
 	pub async fn new(rsa_pem: &str) -> Result<Self, String> {
-		let jwt_issuer_key = DecodingKey::from_rsa_pem(rsa_pem.as_bytes())
+		let jwt_issuer_key = parse_public_key_pem(rsa_pem)
 			.map_err(|e| format!("Failed to parse the PEM formatted RSA public key: {}", e))?;
 		Ok(Self { jwt_issuer_key })
 	}
@@ -53,10 +68,41 @@ impl Authorizer for JWTAuthorizer {
 			.strip_prefix(BEARER_PREFIX)
 			.ok_or(VssError::AuthError("Invalid token format.".to_string()))?;
 
-		let claims =
-			decode::<Claims>(token, &self.jwt_issuer_key, &Validation::new(Algorithm::RS256))
-				.map_err(|e| VssError::AuthError(format!("Authentication failure. {}", e)))?
-				.claims;
+		let mut iter = token.split('.');
+		let [header_base64, claims_base64, signature_base64] =
+			match [iter.next(), iter.next(), iter.next(), iter.next()] {
+				[Some(h), Some(c), Some(s), None] => [h, c, s],
+				_ => {
+					return Err(VssError::AuthError(String::from(
+						"Token does not have three parts",
+					)))
+				},
+			};
+
+		let header_bytes = URL_SAFE_NO_PAD
+			.decode(header_base64)
+			.map_err(|_| VssError::AuthError(String::from("Header base64 decode failed")))?;
+		let header: serde_json::Value = serde_json::from_slice(&header_bytes)
+			.map_err(|_| VssError::AuthError(String::from("Header json decode failed")))?;
+		match header["alg"] {
+			serde_json::Value::String(ref alg) if alg == "RS256" => (),
+			_ => return Err(VssError::AuthError(String::from("alg: RS256 not found in header"))),
+		}
+
+		let (message, _) = token.rsplit_once('.').expect("There are two periods in the token");
+		let signature = URL_SAFE_NO_PAD
+			.decode(signature_base64)
+			.map_err(|_| VssError::AuthError(String::from("Signature base64 decode failed")))?;
+		let digest = Sha256::digest(message.as_bytes());
+		self.jwt_issuer_key
+			.verify(rsa::pkcs1v15::Pkcs1v15Sign::new::<Sha256>(), &digest, &signature)
+			.map_err(|_| VssError::AuthError(String::from("RSA verification failed")))?;
+
+		let claims_json = URL_SAFE_NO_PAD
+			.decode(claims_base64)
+			.map_err(|_| VssError::AuthError(String::from("Claims base64 decode failed")))?;
+		let claims: Claims = serde_json::from_slice(&claims_json)
+			.map_err(|_| VssError::AuthError(String::from("Claims json decode failed")))?;
 
 		Ok(AuthResponse { user_token: claims.sub })
 	}
