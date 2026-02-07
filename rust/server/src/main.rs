@@ -86,8 +86,8 @@ fn main() {
 						info!("Configured JWT authorizer with RSA public key");
 						Some(Arc::new(auth))
 					},
-					Err(e) => {
-						error!("Failed to configure JWT authorizer: {}", e);
+					Err(()) => {
+						error!("Failed to configure JWT authorizer");
 						std::process::exit(-1);
 					},
 				};
