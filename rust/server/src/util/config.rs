@@ -27,7 +27,7 @@ struct TomlConfig {
 
 #[derive(Deserialize)]
 struct ServerConfig {
-	bind_address: Option<SocketAddr>,
+	bind_address: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -58,7 +58,7 @@ struct LogConfig {
 
 // Encapsulates the result of reading both the environment variables and the config file.
 pub(crate) struct Configuration {
-	pub(crate) bind_address: SocketAddr,
+	pub(crate) bind_address: String,
 	pub(crate) rsa_pem: Option<String>,
 	pub(crate) postgresql_prefix: String,
 	pub(crate) default_db: String,
@@ -99,13 +99,7 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 			None => TomlConfig::default(), // All fields are set to `None`
 		};
 
-	let bind_address_env = read_env(BIND_ADDR_VAR)?
-		.map(|addr| {
-			addr.parse().map_err(|e| {
-				format!("Unable to parse the bind address environment variable: {}", e)
-			})
-		})
-		.transpose()?;
+	let bind_address_env = read_env(BIND_ADDR_VAR)?;
 	let bind_address = read_config(
 		bind_address_env,
 		server_config.and_then(|c| c.bind_address),

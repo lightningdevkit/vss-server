@@ -151,7 +151,7 @@ fn main() {
 		};
 
 		let rest_svc_listener = TcpListener::bind(&config.bind_address).await.unwrap_or_else(|e| {
-			error!("Failed to bind listening port: {}", e);
+			error!("Failed to bind to address {}: {}", config.bind_address, e);
 			std::process::exit(-1);
 		});
 		info!("Listening for incoming connections on {}{}", config.bind_address, crate::vss_service::BASE_PATH_PREFIX);
