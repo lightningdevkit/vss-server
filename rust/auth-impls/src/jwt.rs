@@ -7,8 +7,10 @@ use api::error::VssError;
 use async_trait::async_trait;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
-use rsa::sha2::{Digest, Sha256};
-use rsa::{pkcs8::DecodePublicKey, RsaPublicKey};
+use openssl::hash::MessageDigest;
+use openssl::pkey::PKey;
+use openssl::pkey::Public;
+use openssl::sign::Verifier;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -17,7 +19,7 @@ use std::collections::HashMap;
 ///
 /// Refer: https://datatracker.ietf.org/doc/html/rfc7519
 pub struct JWTAuthorizer {
-	jwt_issuer_key: RsaPublicKey,
+	jwt_issuer_key: PKey<Public>,
 }
 
 /// A set of Claims claimed by 'JsonWebToken'
@@ -34,7 +36,7 @@ pub(crate) struct Claims {
 
 const BEARER_PREFIX: &str = "Bearer ";
 
-fn parse_public_key_pem(pem: &str) -> Result<RsaPublicKey, String> {
+fn parse_public_key_pem(pem: &str) -> Result<PKey<Public>, String> {
 	let body = pem
 		.trim()
 		.strip_prefix("-----BEGIN PUBLIC KEY-----")
@@ -43,7 +45,7 @@ fn parse_public_key_pem(pem: &str) -> Result<RsaPublicKey, String> {
 		.ok_or(String::from("Suffix not found"))?;
 	let body: String = body.lines().map(|line| line.trim()).collect();
 	let body = STANDARD.decode(body).map_err(|_| String::from("Base64 decode failed"))?;
-	RsaPublicKey::from_public_key_der(&body).map_err(|_| String::from("DER decode failed"))
+	PKey::public_key_from_der(&body).map_err(|_| String::from("DER decode failed"))
 }
 
 impl JWTAuthorizer {
@@ -93,10 +95,14 @@ impl Authorizer for JWTAuthorizer {
 		let signature = URL_SAFE_NO_PAD
 			.decode(signature_base64)
 			.map_err(|_| VssError::AuthError(String::from("Signature base64 decode failed")))?;
-		let digest = Sha256::digest(message.as_bytes());
-		self.jwt_issuer_key
-			.verify(rsa::pkcs1v15::Pkcs1v15Sign::new::<Sha256>(), &digest, &signature)
-			.map_err(|_| VssError::AuthError(String::from("RSA verification failed")))?;
+		let mut verifier = Verifier::new(MessageDigest::sha256(), &self.jwt_issuer_key)
+			.map_err(|_| VssError::AuthError(String::from("RSA initialization failed")))?;
+		if !verifier
+			.verify_oneshot(&signature, message.as_bytes())
+			.map_err(|_| VssError::AuthError(String::from("RSA verification failed")))?
+		{
+			return Err(VssError::AuthError(String::from("RSA verification failed")));
+		}
 
 		let claims_json = URL_SAFE_NO_PAD
 			.decode(claims_base64)
