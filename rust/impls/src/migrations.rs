@@ -26,7 +26,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
 	// We do not complain if the table already exists, as users of VSS could have already created this table
 	"CREATE TABLE IF NOT EXISTS vss_db (
 	    user_token character varying(120) NOT NULL CHECK (user_token <> ''),
-	    store_id character varying(120) NOT NULL CHECK (store_id <> ''),
+	    store_id character varying(120) NOT NULL,
 	    key character varying(600) NOT NULL,
 	    value bytea NULL,
 	    version bigint NOT NULL,
@@ -34,6 +34,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
 	    last_updated_at TIMESTAMP WITH TIME ZONE,
 	    PRIMARY KEY (user_token, store_id, key)
 	);",
+	"ALTER TABLE vss_db DROP CONSTRAINT IF EXISTS vss_db_store_id_check;",
 ];
 #[cfg(test)]
 pub(crate) const DUMMY_MIGRATION: &str = "SELECT 1 WHERE FALSE;";

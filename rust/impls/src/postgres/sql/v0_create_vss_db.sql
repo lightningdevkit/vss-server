@@ -1,6 +1,6 @@
 CREATE TABLE vss_db (
     user_token character varying(120) NOT NULL CHECK (user_token <> ''),
-    store_id character varying(120) NOT NULL CHECK (store_id <> ''),
+    store_id character varying(120) NOT NULL,
     key character varying(600) NOT NULL,
     value bytea NULL,
     version bigint NOT NULL,
