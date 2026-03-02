@@ -552,8 +552,12 @@ pub struct TestContext<'a> {
 impl<'a> TestContext<'a> {
 	/// Creates a new [`TestContext`] with the given [`KvStore`] implementation.
 	pub fn new(kv_store: &'a dyn KvStore) -> Self {
-		let store_id: String = (0..7).map(|_| thread_rng().sample(Alphanumeric) as char).collect();
-		TestContext { kv_store, user_token: "userToken".to_string(), store_id }
+		let store_id_len = thread_rng().gen_range(0..6);
+		let store_id: String =
+			(0..store_id_len).map(|_| thread_rng().sample(Alphanumeric) as char).collect();
+		let user_token: String =
+			(0..7).map(|_| thread_rng().sample(Alphanumeric) as char).collect();
+		TestContext { kv_store, user_token, store_id }
 	}
 
 	async fn get_object(&self, key: &str) -> Result<KeyValue, VssError> {
