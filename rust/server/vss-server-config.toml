@@ -1,5 +1,8 @@
 [server_config]
 bind_address = "127.0.0.1:8080" # Optional in TOML, can be overridden by env var `VSS_BIND_ADDRESS`
+# Maximum request body size in bytes. Can be set here or be overridden by env var 'VSS_MAX_REQUEST_BODY_SIZE'
+# Defaults to the maximum possible value of 1 GB if unset.
+# max_request_body_size = 1073741824
 
 # Uncomment the table below to verify JWT tokens in the HTTP Authorization header against the given RSA public key,
 # can be overridden by env var `VSS_JWT_RSA_PEM`
