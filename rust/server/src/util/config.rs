@@ -25,10 +25,19 @@ struct TomlConfig {
 	postgresql_config: Option<PostgreSQLConfig>,
 }
 
+#[derive(Deserialize, Clone)]
+pub(crate) enum StoreType {
+	#[serde(rename = "postgres")]
+	Postgres,
+	#[serde(rename = "in-memory")]
+	InMemory,
+}
+
 #[derive(Deserialize)]
 struct ServerConfig {
 	bind_address: Option<String>,
 	max_request_body_size: Option<usize>,
+	store_type: Option<StoreType>,
 }
 
 #[derive(Deserialize)]
@@ -66,6 +75,7 @@ pub(crate) struct Configuration {
 	pub(crate) default_db: String,
 	pub(crate) vss_db: String,
 	pub(crate) tls_config: Option<Option<String>>,
+	pub(crate) store_type: Option<StoreType>,
 	pub(crate) log_file: PathBuf,
 	pub(crate) log_level: LevelFilter,
 }
@@ -101,9 +111,10 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 			None => TomlConfig::default(), // All fields are set to `None`
 		};
 
-	let (bind_address_config, max_request_body_size_config) = match server_config {
-		Some(c) => (c.bind_address, c.max_request_body_size),
-		None => (None, None),
+	let (bind_address_config, max_request_body_size_config, store_type_config) = match server_config
+	{
+		Some(c) => (c.bind_address, c.max_request_body_size, c.store_type),
+		None => (None, None, None),
 	};
 
 	let bind_address_env = read_env(BIND_ADDR_VAR)?;
@@ -154,6 +165,9 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 	let rsa_pem_env = read_env(JWT_RSA_PEM_VAR)?;
 	let rsa_pem = rsa_pem_env.or(jwt_auth_config.and_then(|config| config.rsa_pem));
 
+	let using_in_memory =
+		matches!(store_type_config.as_ref().unwrap_or(&StoreType::Postgres), StoreType::InMemory);
+
 	let username_env = read_env(PSQL_USER_VAR)?;
 	let password_env = read_env(PSQL_PASS_VAR)?;
 	let address_env: Option<String> = read_env(PSQL_ADDR_VAR)?;
@@ -181,20 +195,43 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		None => (None, None, None, None, None, None),
 	};
 
-	let username =
-		read_config(username_env, username_config, "PostgreSQL database username", PSQL_USER_VAR)?;
-	let password =
-		read_config(password_env, password_config, "PostgreSQL database password", PSQL_PASS_VAR)?;
-	let address =
-		read_config(address_env, address_config, "PostgreSQL service address", PSQL_ADDR_VAR)?;
-	let default_db = read_config(
-		default_db_env,
-		default_db_config,
-		"PostgreSQL default database name",
-		PSQL_DB_VAR,
-	)?;
-	let vss_db =
-		read_config(vss_db_env, vss_db_config, "PostgreSQL vss database name", PSQL_VSS_DB_VAR)?;
+	let (username, password, address, default_db, vss_db) = if using_in_memory {
+		(
+			username_env.or(username_config).unwrap_or_else(|| "dummy".to_string()),
+			password_env.or(password_config).unwrap_or_else(|| "dummy".to_string()),
+			address_env.or(address_config).unwrap_or_else(|| "localhost:5432".to_string()),
+			default_db_env.or(default_db_config).unwrap_or_else(|| "postgres".to_string()),
+			vss_db_env.or(vss_db_config).unwrap_or_else(|| "vss".to_string()),
+		)
+	} else {
+		(
+			read_config(
+				username_env,
+				username_config,
+				"PostgreSQL database username",
+				PSQL_USER_VAR,
+			)?,
+			read_config(
+				password_env,
+				password_config,
+				"PostgreSQL database password",
+				PSQL_PASS_VAR,
+			)?,
+			read_config(address_env, address_config, "PostgreSQL service address", PSQL_ADDR_VAR)?,
+			read_config(
+				default_db_env,
+				default_db_config,
+				"PostgreSQL default database name",
+				PSQL_DB_VAR,
+			)?,
+			read_config(
+				vss_db_env,
+				vss_db_config,
+				"PostgreSQL vss database name",
+				PSQL_VSS_DB_VAR,
+			)?,
+		)
+	};
 
 	let tls_config =
 		crt_pem_env.map(|pem| Some(pem)).or(tls_config_env.map(|_| None)).or(tls_config);
@@ -211,5 +248,6 @@ pub(crate) fn load_configuration(config_file_path: Option<&str>) -> Result<Confi
 		default_db,
 		vss_db,
 		tls_config,
+		store_type: store_type_config,
 	})
 }
