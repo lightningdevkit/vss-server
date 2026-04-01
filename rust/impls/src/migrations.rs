@@ -35,6 +35,9 @@ pub(crate) const MIGRATIONS: &[&str] = &[
 	    PRIMARY KEY (user_token, store_id, key)
 	);",
 	"ALTER TABLE vss_db DROP CONSTRAINT IF EXISTS vss_db_store_id_check;",
+	"UPDATE vss_db SET created_at = COALESCE(last_updated_at, NOW()) WHERE created_at IS NULL;",
+	"ALTER TABLE vss_db ALTER COLUMN created_at SET NOT NULL;",
+	"CREATE INDEX idx_vss_db_created_at ON vss_db (user_token, store_id, created_at, key);",
 ];
 #[cfg(test)]
 pub(crate) const DUMMY_MIGRATION: &str = "SELECT 1 WHERE FALSE;";

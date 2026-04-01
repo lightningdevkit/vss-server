@@ -33,6 +33,25 @@ pub(crate) struct VssDbRecord {
 const KEY_COLUMN: &str = "key";
 const VALUE_COLUMN: &str = "value";
 const VERSION_COLUMN: &str = "version";
+const CREATED_AT_COLUMN: &str = "created_at";
+
+/// Page token is encoded as 20-char zero-padded epoch microseconds followed by the key.
+fn encode_page_token(created_at: &chrono::DateTime<Utc>, key: &str) -> String {
+	format!("{:020}{}", created_at.timestamp_micros(), key)
+}
+
+fn decode_page_token(token: &str) -> Result<(chrono::DateTime<Utc>, String), VssError> {
+	if token.len() < 20 {
+		return Err(VssError::InvalidRequestError("Invalid page token".to_string()));
+	}
+	let micros: i64 = token[..20]
+		.parse()
+		.map_err(|_| VssError::InvalidRequestError("Invalid page token".to_string()))?;
+	let created_at = chrono::DateTime::from_timestamp_micros(micros)
+		.ok_or_else(|| VssError::InvalidRequestError("Invalid page token".to_string()))?;
+	let key = token[20..].to_string();
+	Ok((created_at, key))
+}
 
 /// The maximum number of key versions that can be returned in a single page.
 ///
@@ -663,17 +682,24 @@ where
 
 		let conn = self.pool.get().await?;
 
-		let stmt = "SELECT key, version FROM vss_db WHERE user_token = $1 AND store_id = $2 AND key > $3 AND key LIKE $4 ORDER BY key LIMIT $5";
-
 		let key_like = format!("{}%", key_prefix.as_deref().unwrap_or_default());
-		let page_token_param = page_token.as_deref().unwrap_or_default();
-		let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
-			vec![&user_token, &store_id, &page_token_param, &key_like, &limit];
 
-		let rows = conn
-			.query(stmt, &params)
-			.await
-			.map_err(|e| Error::new(ErrorKind::Other, format!("Query error: {}", e)))?;
+		let rows = if let Some(ref token) = page_token {
+			let (page_created_at, page_key) = decode_page_token(token)?;
+			let stmt = "SELECT key, version, created_at FROM vss_db WHERE user_token = $1 AND store_id = $2 AND (created_at, key) > ($3, $4) AND key LIKE $5 ORDER BY created_at, key LIMIT $6";
+			let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+				vec![&user_token, &store_id, &page_created_at, &page_key, &key_like, &limit];
+			conn.query(stmt, &params)
+				.await
+				.map_err(|e| Error::new(ErrorKind::Other, format!("Query error: {}", e)))?
+		} else {
+			let stmt = "SELECT key, version, created_at FROM vss_db WHERE user_token = $1 AND store_id = $2 AND key LIKE $3 ORDER BY created_at, key LIMIT $4";
+			let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+				vec![&user_token, &store_id, &key_like, &limit];
+			conn.query(stmt, &params)
+				.await
+				.map_err(|e| Error::new(ErrorKind::Other, format!("Query error: {}", e)))?
+		};
 
 		let key_versions: Vec<_> = rows
 			.iter()
@@ -686,8 +712,10 @@ where
 			.collect();
 
 		let mut next_page_token = Some("".to_string());
-		if !key_versions.is_empty() {
-			next_page_token = key_versions.get(key_versions.len() - 1).map(|kv| kv.key.to_string());
+		if let Some(last_kv) = key_versions.last() {
+			let last_created_at =
+				rows[rows.len() - 1].get::<&str, chrono::DateTime<Utc>>(CREATED_AT_COLUMN);
+			next_page_token = Some(encode_page_token(&last_created_at, &last_kv.key));
 		}
 
 		Ok(ListKeyVersionsResponse { key_versions, next_page_token, global_version })
@@ -696,11 +724,12 @@ where
 
 #[cfg(test)]
 mod tests {
-	use super::{drop_database, DUMMY_MIGRATION, MIGRATIONS};
+	use super::{decode_page_token, drop_database, encode_page_token, DUMMY_MIGRATION, MIGRATIONS};
 	use crate::postgres_store::PostgresPlaintextBackend;
 	use api::define_kv_store_tests;
 	use api::kv_store::KvStore;
 	use api::types::{DeleteObjectRequest, GetObjectRequest, KeyValue, PutObjectRequest};
+	use chrono::{TimeZone, Utc as ChronoUtc};
 
 	use bytes::Bytes;
 	use tokio::sync::OnceCell;
@@ -883,5 +912,28 @@ mod tests {
 		};
 
 		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[test]
+	fn page_token_roundtrips() {
+		let created_at = ChronoUtc.with_ymd_and_hms(2026, 3, 15, 12, 30, 45).unwrap();
+		let key = "some/test/key";
+
+		let token = encode_page_token(&created_at, key);
+		let (decoded_time, decoded_key) = decode_page_token(&token).unwrap();
+
+		assert_eq!(decoded_time, created_at);
+		assert_eq!(decoded_key, key);
+	}
+
+	#[test]
+	fn page_token_rejects_short_input() {
+		assert!(decode_page_token("tooshort").is_err());
+		assert!(decode_page_token("").is_err());
+	}
+
+	#[test]
+	fn page_token_rejects_non_numeric_prefix() {
+		assert!(decode_page_token("abcdefghijklmnopqrstkey").is_err());
 	}
 }
