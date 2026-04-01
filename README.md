@@ -48,7 +48,8 @@ integration with different cloud providers. As long as the API contract is imple
 effortlessly switch between different instances of VSS.
 
 VSS ships with a PostgreSQL implementation by default and can be hosted in your favorite infrastructure/cloud provider
-(AWS/GCP) and its backend storage can be switched with some other implementation for KeyValueStore if needed.
+(AWS/GCP). The backend storage can be switched with another implementation, but it must support ordering by creation
+time, a simple key-value store is not sufficient.
 
 ### Project Status
 

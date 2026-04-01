@@ -35,6 +35,8 @@ pub(crate) const MIGRATIONS: &[&str] = &[
 	    PRIMARY KEY (user_token, store_id, key)
 	);",
 	"ALTER TABLE vss_db DROP CONSTRAINT IF EXISTS vss_db_store_id_check;",
+	"ALTER TABLE vss_db ADD COLUMN IF NOT EXISTS sort_order BIGSERIAL NOT NULL UNIQUE;",
+	"CREATE INDEX IF NOT EXISTS idx_vss_db_sort_order ON vss_db (user_token, store_id, sort_order DESC) INCLUDE (key, version);",
 ];
 #[cfg(test)]
 pub(crate) const DUMMY_MIGRATION: &str = "SELECT 1 WHERE FALSE;";

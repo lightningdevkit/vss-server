@@ -6,5 +6,6 @@ CREATE TABLE vss_db (
     version bigint NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE,
     last_updated_at TIMESTAMP WITH TIME ZONE,
+    sort_order BIGSERIAL NOT NULL UNIQUE,
     PRIMARY KEY (user_token, store_id, key)
 );

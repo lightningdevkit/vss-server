@@ -33,6 +33,22 @@ pub(crate) struct VssDbRecord {
 const KEY_COLUMN: &str = "key";
 const VALUE_COLUMN: &str = "value";
 const VERSION_COLUMN: &str = "version";
+const SORT_ORDER_COLUMN: &str = "sort_order";
+
+/// Page token is the `sort_order` value of the last item in the previous page,
+/// encoded as a decimal string.
+fn encode_page_token(sort_order: i64) -> String {
+	sort_order.to_string()
+}
+
+fn decode_page_token(token: &str) -> Result<i64, VssError> {
+	let invalid = || VssError::InvalidRequestError("Invalid page token".to_string());
+	let sort_order = token.parse::<i64>().map_err(|_| invalid())?;
+	if sort_order < 0 {
+		return Err(invalid());
+	}
+	Ok(sort_order)
+}
 
 /// The maximum number of key versions that can be returned in a single page.
 ///
@@ -659,25 +675,61 @@ where
 			global_version = Some(get_response.value.unwrap().version);
 		}
 
+		// When page_size is 0, we can decide how many items to return.
+		// Honor the 0 and just give the `global_version`.
+		if page_size == 0 {
+			return Ok(ListKeyVersionsResponse {
+				key_versions: vec![],
+				next_page_token: Some(String::new()),
+				global_version,
+			});
+		}
+
 		let limit = min(page_size, LIST_KEY_VERSIONS_MAX_PAGE_SIZE) as i64;
+		// Fetch one extra to determine if there are more pages.
+		let fetch_limit = limit + 1;
 
 		let conn = self.pool.get().await?;
 
-		let stmt = "SELECT key, version FROM vss_db WHERE user_token = $1 AND store_id = $2 AND key > $3 AND key LIKE $4 ORDER BY key LIMIT $5";
-
 		let key_like = format!("{}%", key_prefix.as_deref().unwrap_or_default());
-		let page_token_param = page_token.as_deref().unwrap_or_default();
-		let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
-			vec![&user_token, &store_id, &page_token_param, &key_like, &limit];
 
-		let rows = conn
-			.query(stmt, &params)
-			.await
-			.map_err(|e| Error::new(ErrorKind::Other, format!("Query error: {}", e)))?;
+		let rows = if let Some(ref token) = page_token {
+			let page_sort_order = decode_page_token(token)?;
+			let stmt = "SELECT key, version, sort_order FROM vss_db WHERE user_token = $1 AND store_id = $2 AND sort_order < $3 AND key LIKE $4 AND key != $5 ORDER BY sort_order DESC LIMIT $6";
+			let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![
+				&user_token,
+				&store_id,
+				&page_sort_order,
+				&key_like,
+				&GLOBAL_VERSION_KEY,
+				&fetch_limit,
+			];
+			conn.query(stmt, &params)
+				.await
+				.map_err(|e| Error::new(ErrorKind::Other, format!("Query error: {}", e)))?
+		} else {
+			let stmt = "SELECT key, version, sort_order FROM vss_db WHERE user_token = $1 AND store_id = $2 AND key LIKE $3 AND key != $4 ORDER BY sort_order DESC LIMIT $5";
+			let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+				vec![&user_token, &store_id, &key_like, &GLOBAL_VERSION_KEY, &fetch_limit];
+			conn.query(stmt, &params)
+				.await
+				.map_err(|e| Error::new(ErrorKind::Other, format!("Query error: {}", e)))?
+		};
+
+		let limit_usize = limit as usize;
+		let has_more = rows.len() > limit_usize;
+
+		let next_page_token = if has_more {
+			let last = &rows[limit_usize - 1];
+			let last_sort_order: i64 = last.get(SORT_ORDER_COLUMN);
+			Some(encode_page_token(last_sort_order))
+		} else {
+			Some(String::new())
+		};
 
 		let key_versions: Vec<_> = rows
 			.iter()
-			.filter(|&row| row.get::<&str, &str>(KEY_COLUMN) != GLOBAL_VERSION_KEY)
+			.take(limit_usize)
 			.map(|row| KeyValue {
 				key: row.get(KEY_COLUMN),
 				value: Bytes::new(),
@@ -685,22 +737,19 @@ where
 			})
 			.collect();
 
-		let mut next_page_token = Some("".to_string());
-		if !key_versions.is_empty() {
-			next_page_token = key_versions.get(key_versions.len() - 1).map(|kv| kv.key.to_string());
-		}
-
 		Ok(ListKeyVersionsResponse { key_versions, next_page_token, global_version })
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{drop_database, DUMMY_MIGRATION, MIGRATIONS};
+	use super::{decode_page_token, drop_database, encode_page_token, DUMMY_MIGRATION, MIGRATIONS};
 	use crate::postgres_store::PostgresPlaintextBackend;
 	use api::define_kv_store_tests;
 	use api::kv_store::KvStore;
-	use api::types::{DeleteObjectRequest, GetObjectRequest, KeyValue, PutObjectRequest};
+	use api::types::{
+		DeleteObjectRequest, GetObjectRequest, KeyValue, ListKeyVersionsRequest, PutObjectRequest,
+	};
 
 	use bytes::Bytes;
 	use tokio::sync::OnceCell;
@@ -712,6 +761,28 @@ mod tests {
 	const MIGRATIONS_END: usize = MIGRATIONS.len();
 
 	static START: OnceCell<()> = OnceCell::const_new();
+
+	async fn put_test_key(
+		store: &PostgresPlaintextBackend, user_token: &str, store_id: &str, key: &str,
+		global_version: Option<i64>,
+	) {
+		store
+			.put(
+				user_token.to_string(),
+				PutObjectRequest {
+					store_id: store_id.to_string(),
+					global_version,
+					transaction_items: vec![KeyValue {
+						key: key.to_string(),
+						value: Bytes::from_static(b"v1"),
+						version: 0,
+					}],
+					delete_items: vec![],
+				},
+			)
+			.await
+			.unwrap();
+	}
 
 	define_kv_store_tests!(PostgresKvStoreTest, PostgresPlaintextBackend, {
 		let vss_db = "postgres_kv_store_tests";
@@ -883,5 +954,224 @@ mod tests {
 		};
 
 		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn list_orders_by_sort_order_desc() {
+		let vss_db = "list_orders_by_sort_order_desc";
+		let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
+
+		{
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
+			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
+			assert_eq!(start, MIGRATIONS_START);
+			assert_eq!(end, MIGRATIONS_END);
+
+			for key in ["c_key", "a_key", "b_key"] {
+				put_test_key(&store, "token", "store", key, None).await;
+			}
+
+			let resp = store
+				.list_key_versions(
+					"token".to_string(),
+					ListKeyVersionsRequest {
+						store_id: "store".to_string(),
+						page_token: None,
+						page_size: None,
+						key_prefix: None,
+					},
+				)
+				.await
+				.unwrap();
+
+			let keys: Vec<&str> = resp.key_versions.iter().map(|kv| kv.key.as_str()).collect();
+			assert_eq!(keys, vec!["b_key", "a_key", "c_key"]);
+
+			let mut all_keys = Vec::new();
+			let mut token = None;
+			loop {
+				let page = store
+					.list_key_versions(
+						"token".to_string(),
+						ListKeyVersionsRequest {
+							store_id: "store".to_string(),
+							page_token: token,
+							page_size: Some(1),
+							key_prefix: None,
+						},
+					)
+					.await
+					.unwrap();
+				for kv in &page.key_versions {
+					all_keys.push(kv.key.clone());
+				}
+				match page.next_page_token {
+					Some(ref t) if !t.is_empty() => token = page.next_page_token,
+					_ => break,
+				}
+			}
+			assert_eq!(all_keys, vec!["b_key", "a_key", "c_key"]);
+		}
+
+		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn list_zero_page_size_should_return_only_global_version() {
+		let vss_db = "list_zero_page_size_should_return_only_global_version";
+		let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
+
+		{
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
+			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
+			assert_eq!(start, MIGRATIONS_START);
+			assert_eq!(end, MIGRATIONS_END);
+
+			for i in 0..3 {
+				put_test_key(&store, "token", "store", &format!("k{}", i), Some(i)).await;
+			}
+
+			let resp = store
+				.list_key_versions(
+					"token".to_string(),
+					ListKeyVersionsRequest {
+						store_id: "store".to_string(),
+						page_token: None,
+						page_size: Some(0),
+						key_prefix: None,
+					},
+				)
+				.await
+				.unwrap();
+
+			assert!(resp.key_versions.is_empty());
+			assert_eq!(resp.global_version, Some(3));
+			assert_eq!(resp.next_page_token.filter(|t| !t.is_empty()), None);
+		}
+
+		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn list_should_return_empty_page_token_when_exact_fit() {
+		let vss_db = "list_should_return_empty_page_token_when_exact_fit";
+		let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
+
+		{
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
+			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
+			assert_eq!(start, MIGRATIONS_START);
+			assert_eq!(end, MIGRATIONS_END);
+
+			for i in 0..5 {
+				put_test_key(&store, "token", "store", &format!("k{}", i), Some(i)).await;
+			}
+
+			let resp = store
+				.list_key_versions(
+					"token".to_string(),
+					ListKeyVersionsRequest {
+						store_id: "store".to_string(),
+						page_token: None,
+						page_size: Some(5),
+						key_prefix: None,
+					},
+				)
+				.await
+				.unwrap();
+
+			assert_eq!(resp.key_versions.len(), 5);
+			assert_eq!(resp.global_version, Some(5));
+			// can be empty string or None to signify end of items
+			assert_eq!(resp.next_page_token.filter(|t| !t.is_empty()), None);
+		}
+
+		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn list_should_return_empty_page_token_on_last_non_empty_page() {
+		let vss_db = "list_should_return_empty_page_token_on_last_non_empty_page";
+		let _ = drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await;
+
+		{
+			let store =
+				PostgresPlaintextBackend::new(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db).await.unwrap();
+			let (start, end) = store.migrate_vss_database(MIGRATIONS).await.unwrap();
+			assert_eq!(start, MIGRATIONS_START);
+			assert_eq!(end, MIGRATIONS_END);
+
+			for i in 0..6 {
+				put_test_key(&store, "token", "store", &format!("k{}", i), Some(i)).await;
+			}
+
+			let first_page = store
+				.list_key_versions(
+					"token".to_string(),
+					ListKeyVersionsRequest {
+						store_id: "store".to_string(),
+						page_token: None,
+						page_size: Some(5),
+						key_prefix: None,
+					},
+				)
+				.await
+				.unwrap();
+
+			assert_eq!(first_page.key_versions.len(), 5);
+			assert_eq!(first_page.global_version, Some(6));
+			assert!(first_page.next_page_token.as_ref().is_some_and(|token| !token.is_empty()));
+
+			let second_page = store
+				.list_key_versions(
+					"token".to_string(),
+					ListKeyVersionsRequest {
+						store_id: "store".to_string(),
+						page_token: first_page.next_page_token,
+						page_size: Some(5),
+						key_prefix: None,
+					},
+				)
+				.await
+				.unwrap();
+
+			assert_eq!(second_page.key_versions.len(), 1);
+			assert_eq!(second_page.next_page_token.filter(|t| !t.is_empty()), None);
+			assert!(second_page.global_version.is_none());
+		}
+
+		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[test]
+	fn page_token_roundtrips() {
+		let token = encode_page_token(12345);
+		assert_eq!(decode_page_token(&token).unwrap(), 12345);
+	}
+
+	#[test]
+	fn page_token_has_expected_format() {
+		let token = encode_page_token(42);
+		assert_eq!(token, "42");
+	}
+
+	#[test]
+	fn page_token_rejects_empty_input() {
+		assert!(decode_page_token("").is_err());
+	}
+
+	#[test]
+	fn page_token_rejects_non_numeric_sort_order() {
+		assert!(decode_page_token("abc").is_err());
+	}
+
+	#[test]
+	fn page_token_rejects_negative_sort_order() {
+		for bad in ["-1", "-67", &i64::MIN.to_string()] {
+			assert!(decode_page_token(bad).is_err());
+		}
 	}
 }
