@@ -92,7 +92,7 @@ mod tests {
 	use crate::signature::{SignatureValidatingAuthorizer, SIGNING_CONSTANT};
 	use api::auth::Authorizer;
 	use api::error::VssError;
-	use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+	use secp256k1::{Message, PublicKey, SecretKey};
 	use std::collections::HashMap;
 	use std::fmt::Write;
 	use std::time::SystemTime;
