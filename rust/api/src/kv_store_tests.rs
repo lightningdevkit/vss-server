@@ -520,8 +520,8 @@ pub trait KvStoreTestSuite {
 		let page = ctx.list(None, None, None).await?;
 		let keys: Vec<&str> = page.key_versions.iter().map(|kv| kv.key.as_str()).collect();
 
-		// Results should be in creation order, not alphabetical.
-		assert_eq!(keys, vec!["z_first", "m_second", "a_third"]);
+		// Results should be in reverse creation order (newest first), not alphabetical.
+		assert_eq!(keys, vec!["a_third", "m_second", "z_first"]);
 
 		Ok(())
 	}
@@ -547,16 +547,17 @@ pub trait KvStoreTestSuite {
 			};
 
 			if current_page.key_versions.is_empty() {
+				assert_eq!(current_page.next_page_token, Some(String::new()));
 				break;
 			}
 
-			assert!(current_page.key_versions.len() <= 1);
+			assert_eq!(current_page.key_versions.len(), 1);
 			all_keys.extend(current_page.key_versions.into_iter().map(|kv| kv.key));
 			next_page_token = current_page.next_page_token;
 		}
 
-		// Should get prefixed keys in creation order, excluding "other".
-		assert_eq!(all_keys, vec!["pfx_z", "pfx_a", "pfx_m"]);
+		// Should get prefixed keys in reverse creation order (newest first), excluding "other".
+		assert_eq!(all_keys, vec!["pfx_m", "pfx_a", "pfx_z"]);
 
 		Ok(())
 	}

@@ -37,6 +37,7 @@ const CREATED_AT_COLUMN: &str = "created_at";
 
 /// Page token is encoded as 20-char zero-padded epoch microseconds followed by the key.
 fn encode_page_token(created_at: &chrono::DateTime<Utc>, key: &str) -> String {
+	// Uses microsecond precision to match the timestamp precision stored in Postgres.
 	format!("{:020}{}", created_at.timestamp_micros(), key)
 }
 
@@ -686,14 +687,14 @@ where
 
 		let rows = if let Some(ref token) = page_token {
 			let (page_created_at, page_key) = decode_page_token(token)?;
-			let stmt = "SELECT key, version, created_at FROM vss_db WHERE user_token = $1 AND store_id = $2 AND (created_at, key) > ($3, $4) AND key LIKE $5 ORDER BY created_at, key LIMIT $6";
+			let stmt = "SELECT key, version, created_at FROM vss_db WHERE user_token = $1 AND store_id = $2 AND (created_at, key) < ($3, $4) AND key LIKE $5 ORDER BY created_at DESC, key DESC LIMIT $6";
 			let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
 				vec![&user_token, &store_id, &page_created_at, &page_key, &key_like, &limit];
 			conn.query(stmt, &params)
 				.await
 				.map_err(|e| Error::new(ErrorKind::Other, format!("Query error: {}", e)))?
 		} else {
-			let stmt = "SELECT key, version, created_at FROM vss_db WHERE user_token = $1 AND store_id = $2 AND key LIKE $3 ORDER BY created_at, key LIMIT $4";
+			let stmt = "SELECT key, version, created_at FROM vss_db WHERE user_token = $1 AND store_id = $2 AND key LIKE $3 ORDER BY created_at DESC, key DESC LIMIT $4";
 			let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
 				vec![&user_token, &store_id, &key_like, &limit];
 			conn.query(stmt, &params)
@@ -714,7 +715,7 @@ where
 		let mut next_page_token = Some("".to_string());
 		if let Some(last_kv) = key_versions.last() {
 			let last_created_at =
-				rows[rows.len() - 1].get::<&str, chrono::DateTime<Utc>>(CREATED_AT_COLUMN);
+				rows.last().unwrap().get::<&str, chrono::DateTime<Utc>>(CREATED_AT_COLUMN);
 			next_page_token = Some(encode_page_token(&last_created_at, &last_kv.key));
 		}
 

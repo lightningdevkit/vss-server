@@ -210,7 +210,7 @@ message ListKeyVersionsRequest {
 // Server response for `ListKeyVersions` API.
 message ListKeyVersionsResponse {
 
-  // Fetched keys and versions.
+  // Fetched keys and versions, ordered by creation time (oldest first).
   // Even though this API reuses the `KeyValue` struct, the `value` sub-field will not be set by the server.
   repeated KeyValue key_versions = 1;
 
