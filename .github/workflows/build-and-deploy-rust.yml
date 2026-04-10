@@ -45,6 +45,9 @@ jobs:
         run: |
           sleep 5
 
+          # Health check
+          curl -f http://localhost:8080/vss/health
+
           # Put request with store='storeId' and key=k1
           hex=0A0773746F726549641A150A026B3110FFFFFFFFFFFFFFFFFF011A046B317631
           curl -f --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/putObjects

@@ -80,6 +80,10 @@ impl Service<Request<Incoming>> for VssService {
 			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
+				"/health" => Ok(Response::builder()
+					.status(StatusCode::OK)
+					.body(Full::new(Bytes::new()))
+					.unwrap()),
 				"/getObject" => {
 					handle_request(
 						store,
