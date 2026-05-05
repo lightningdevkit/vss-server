@@ -53,6 +53,8 @@ macro_rules! define_kv_store_tests {
 		create_test!(list_should_honour_page_size_and_key_prefix_if_provided);
 		create_test!(list_should_return_zero_global_version_when_global_versioning_not_enabled);
 		create_test!(list_should_limit_max_page_size);
+		create_test!(list_should_return_results_ordered_by_creation_time);
+		create_test!(list_should_paginate_by_creation_time_with_prefix);
 	};
 }
 
@@ -393,12 +395,11 @@ pub trait KvStoreTestSuite {
 				},
 			};
 
-			if current_page.key_versions.is_empty() {
-				break;
-			}
-
 			all_key_versions.extend(current_page.key_versions);
-			next_page_token = current_page.next_page_token;
+			match current_page.next_page_token {
+				Some(token) if !token.is_empty() => next_page_token = Some(token),
+				_ => break,
+			}
 		}
 
 		if let Some(k1_response) = all_key_versions.iter().find(|kv| kv.key == "k1") {
@@ -444,13 +445,12 @@ pub trait KvStoreTestSuite {
 				},
 			};
 
-			if current_page.key_versions.is_empty() {
-				break;
-			}
-
 			assert!(current_page.key_versions.len() <= page_size as usize);
 			all_key_versions.extend(current_page.key_versions);
-			next_page_token = current_page.next_page_token;
+			match current_page.next_page_token {
+				Some(token) if !token.is_empty() => next_page_token = Some(token),
+				_ => break,
+			}
 		}
 
 		let unique_keys: std::collections::HashSet<String> =
@@ -490,18 +490,77 @@ pub trait KvStoreTestSuite {
 				Some(next_page_token) => ctx.list(Some(next_page_token), None, None).await?,
 			};
 
-			if current_page.key_versions.is_empty() {
-				break;
-			}
-
 			all_key_versions.extend(current_page.key_versions);
-			next_page_token = current_page.next_page_token;
+			match current_page.next_page_token {
+				Some(token) if !token.is_empty() => next_page_token = Some(token),
+				_ => break,
+			}
 		}
 
 		let unique_keys: std::collections::HashSet<String> =
 			all_key_versions.into_iter().map(|kv| kv.key).collect();
 		assert_eq!(unique_keys.len(), total_kv_objects as usize);
 		assert!(!unique_keys.contains(GLOBAL_VERSION_KEY));
+
+		Ok(())
+	}
+
+	async fn list_should_return_results_ordered_by_creation_time() -> Result<(), VssError> {
+		let kv_store = Self::create_store().await;
+		let ctx = TestContext::new(&kv_store);
+
+		ctx.put_objects(Some(0), vec![kv("z_first", "v1", 0)]).await?;
+		ctx.put_objects(Some(1), vec![kv("a_third", "v1", 0)]).await?;
+		ctx.put_objects(Some(2), vec![kv("m_second", "v1", 0)]).await?;
+
+		let page = ctx.list(None, None, None).await?;
+		assert_eq!(page.global_version, Some(3));
+		let keys: Vec<&str> = page.key_versions.iter().map(|kv| kv.key.as_str()).collect();
+
+		// Results should be in reverse creation order (newest first), not alphabetical.
+		assert_eq!(keys, vec!["m_second", "a_third", "z_first"]);
+
+		Ok(())
+	}
+
+	async fn list_should_paginate_by_creation_time_with_prefix() -> Result<(), VssError> {
+		let kv_store = Self::create_store().await;
+		let ctx = TestContext::new(&kv_store);
+
+		// Insert prefixed keys in reverse-alphabetical order with a page_size of 1
+		// to force multiple pages and verify cross-page ordering.
+		ctx.put_objects(Some(0), vec![kv("pfx_z", "v1", 0)]).await?;
+		ctx.put_objects(Some(1), vec![kv("pfx_a", "v1", 0)]).await?;
+		ctx.put_objects(Some(2), vec![kv("other", "v1", 0)]).await?;
+		ctx.put_objects(Some(3), vec![kv("pfx_m", "v1", 0)]).await?;
+
+		let mut next_page_token: Option<String> = None;
+		let mut all_keys: Vec<String> = Vec::new();
+
+		loop {
+			let current_page = match next_page_token.take() {
+				None => {
+					let page = ctx.list(None, Some(1), Some("pfx_".to_string())).await?;
+					assert_eq!(page.global_version, Some(4));
+					page
+				},
+				Some(token) => {
+					let page = ctx.list(Some(token), Some(1), Some("pfx_".to_string())).await?;
+					assert!(page.global_version.is_none());
+					page
+				},
+			};
+
+			assert!(current_page.key_versions.len() <= 1);
+			all_keys.extend(current_page.key_versions.into_iter().map(|kv| kv.key));
+			match current_page.next_page_token {
+				Some(token) if !token.is_empty() => next_page_token = Some(token),
+				_ => break,
+			}
+		}
+
+		// Should get prefixed keys in reverse creation order (newest first), excluding "other".
+		assert_eq!(all_keys, vec!["pfx_m", "pfx_a", "pfx_z"]);
 
 		Ok(())
 	}
@@ -524,16 +583,15 @@ pub trait KvStoreTestSuite {
 				None => ctx.list(None, None, None).await?,
 				Some(next_page_token) => ctx.list(Some(next_page_token), None, None).await?,
 			};
-			if current_page.key_versions.is_empty() {
-				break;
-			}
-
 			assert!(
 				current_page.key_versions.len() < vss_arbitrary_page_size_max as usize,
 				"Page size exceeds the maximum allowed size"
 			);
 			all_key_versions.extend(current_page.key_versions);
-			next_page_token = current_page.next_page_token;
+			match current_page.next_page_token {
+				Some(token) if !token.is_empty() => next_page_token = Some(token),
+				_ => break,
+			}
 		}
 
 		assert_eq!(all_key_versions.len(), total_kv_objects as usize);

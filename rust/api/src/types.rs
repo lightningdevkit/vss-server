@@ -212,13 +212,15 @@ pub struct ListKeyVersionsRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListKeyVersionsResponse {
-	/// Fetched keys and versions.
+	/// Fetched keys and versions, ordered by creation time (newest first).
 	/// Even though this API reuses the `KeyValue` struct, the `value` sub-field will not be set by the server.
 	#[prost(message, repeated, tag = "1")]
 	pub key_versions: ::prost::alloc::vec::Vec<KeyValue>,
 	/// `next_page_token` is a pagination token, used to retrieve the next page of results.
 	/// Use this value to query for next-page of paginated `ListKeyVersions` operation, by specifying
 	/// this value as the `page_token` in the next request.
+	///
+	/// Following AIP-158 (<https://google.aip.dev/158>):
 	///
 	/// If `next_page_token` is empty (""), then the "last page" of results has been processed and
 	/// there is no more data to be retrieved.
