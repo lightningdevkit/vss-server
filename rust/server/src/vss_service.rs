@@ -12,7 +12,7 @@ use api::kv_store::KvStore;
 use api::types::{
 	DeleteObjectRequest, DeleteObjectResponse, ErrorCode, ErrorResponse, GetObjectRequest,
 	GetObjectResponse, ListKeyVersionsRequest, ListKeyVersionsResponse, PutObjectRequest,
-	PutObjectResponse,
+	PutObjectResponse, Version, VersionResponse,
 };
 use std::future::Future;
 use std::pin::Pin;
@@ -80,6 +80,14 @@ impl Service<Request<Incoming>> for VssService {
 			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
+				"/version" => {
+					let response = VersionResponse { version: Version::V1.into() };
+					let response = Response::builder()
+						.body(Full::new(Bytes::from(response.encode_to_vec())))
+						// unwrap safety: body only errors when previous chained calls failed.
+						.unwrap();
+					Ok(response)
+				},
 				"/getObject" => {
 					handle_request(
 						store,
