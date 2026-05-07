@@ -20,7 +20,6 @@ pub mod error;
 pub mod kv_store;
 
 /// Contains request/response types generated from the API definition of VSS.
-#[rustfmt::skip]
 pub mod types;
 
 #[cfg(feature = "_test_utils")]
