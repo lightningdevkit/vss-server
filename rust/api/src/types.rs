@@ -1,11 +1,3 @@
-/// Server response on the `/version` endpoint.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct VersionResponse {
-    /// The API version supported by the server.
-    #[prost(enumeration = "Version", tag = "1")]
-    pub version: i32,
-}
 /// Request payload to be used for `GetObject` API call to server.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -338,35 +330,6 @@ pub struct PlaintextBlob {
     /// The version of the value. Can be used by client to verify version integrity.
     #[prost(int64, tag = "2")]
     pub version: i64,
-}
-/// Versions of the VSS API.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum Version {
-    /// Default protobuf Enum value. Will not be used as `Version` by server.
-    Vunknown = 0,
-    /// The initial version of the VSS API.
-    V1 = 1,
-}
-impl Version {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Version::Vunknown => "VUNKNOWN",
-            Version::V1 => "V1",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "VUNKNOWN" => Some(Self::Vunknown),
-            "V1" => Some(Self::V1),
-            _ => None,
-        }
-    }
 }
 /// ErrorCodes to be used in `ErrorResponse`
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

@@ -3,23 +3,6 @@ package vss;
 option java_multiple_files = true;
 option java_package = "org.vss";
 
-// Server response on the `/version` endpoint.
-message VersionResponse {
-
-  // The API version supported by the server.
-  Version version = 1;
-}
-
-// Versions of the VSS API.
-enum Version {
-
-  // Default protobuf Enum value. Will not be used as `Version` by server.
-  VUNKNOWN = 0;
-
-  // The initial version of the VSS API.
-  V1 = 1;
-}
-
 // Request payload to be used for `GetObject` API call to server.
 message GetObjectRequest {
 

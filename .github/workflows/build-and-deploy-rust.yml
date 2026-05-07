@@ -45,8 +45,6 @@ jobs:
         run: |
           sleep 5
 
-          [[ $(curl -f -s http://localhost:8080/vss/version | xxd -p) == "0801" ]] || { echo "Version check failed"; exit 1; }
-
           # Put request with store='storeId' and key=k1
           hex=0A0773746F726549641A150A026B3110FFFFFFFFFFFFFFFFFF011A046B317631
           curl -f --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/putObjects

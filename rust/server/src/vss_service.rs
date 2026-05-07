@@ -12,7 +12,7 @@ use api::kv_store::KvStore;
 use api::types::{
 	DeleteObjectRequest, DeleteObjectResponse, ErrorCode, ErrorResponse, GetObjectRequest,
 	GetObjectResponse, ListKeyVersionsRequest, ListKeyVersionsResponse, PutObjectRequest,
-	PutObjectResponse, Version, VersionResponse,
+	PutObjectResponse,
 };
 use std::future::Future;
 use std::pin::Pin;
@@ -24,7 +24,7 @@ use crate::util::KeyValueVecKeyPrinter;
 
 const MAXIMUM_REQUEST_BODY_SIZE: usize = 1024 * 1024 * 1024;
 const PROTOCOL_VERSION_HEADER: &str = "vss-protocol-version";
-const PROTOCOL_VERSION: Version = Version::V1;
+const PROTOCOL_VERSION: &str = "0.1.0";
 
 #[derive(Clone, Copy)]
 pub(crate) struct VssServiceConfig {
@@ -82,10 +82,6 @@ impl Service<Request<Incoming>> for VssService {
 			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
-				"/version" => {
-					let response = VersionResponse { version: PROTOCOL_VERSION.into() };
-					Ok(build_response(StatusCode::OK, Bytes::from(response.encode_to_vec())))
-				},
 				"/getObject" => {
 					handle_request(
 						store,
@@ -244,7 +240,7 @@ async fn handle_request<
 fn build_response(status_code: StatusCode, body: Bytes) -> Response<Full<Bytes>> {
 	Response::builder()
 		.status(status_code)
-		.header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.as_str_name())
+		.header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.as_bytes())
 		.body(Full::new(body))
 		// unwrap safety: body only errors when previous chained calls failed.
 		.unwrap()
@@ -305,10 +301,7 @@ mod tests {
 		let response = build_response(StatusCode::OK, Bytes::new());
 
 		assert_eq!(
-			Version::from_str_name(
-				response.headers().get(PROTOCOL_VERSION_HEADER).unwrap().to_str().unwrap()
-			)
-			.unwrap(),
+			response.headers().get(PROTOCOL_VERSION_HEADER).unwrap().to_str().unwrap(),
 			PROTOCOL_VERSION,
 		);
 	}
@@ -318,10 +311,7 @@ mod tests {
 		let response = build_error_response(VssError::InvalidRequestError("bad request".into()));
 
 		assert_eq!(
-			Version::from_str_name(
-				response.headers().get(PROTOCOL_VERSION_HEADER).unwrap().to_str().unwrap()
-			)
-			.unwrap(),
+			response.headers().get(PROTOCOL_VERSION_HEADER).unwrap().to_str().unwrap(),
 			PROTOCOL_VERSION,
 		);
 	}
