@@ -79,6 +79,17 @@ impl Service<Request<Incoming>> for VssService {
 		let maximum_request_body_size = self.config.maximum_request_body_size;
 
 		Box::pin(async move {
+			if path == "/metrics" {
+				let response = b"# HELP vss_service_up Is the vss service up?\n# TYPE vss_service_up gauge\nvss_service_up 1\n";
+				return Ok(Response::builder()
+					.status(StatusCode::OK)
+					.header("Content-Type", "text/plain; version=0.0.4")
+					.header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.as_bytes())
+					.body(Full::new(Bytes::from_static(response)))
+					// unwrap safety: body only errors when previous chained calls failed.
+					.unwrap());
+			}
+
 			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
