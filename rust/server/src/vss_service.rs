@@ -23,6 +23,8 @@ use log::{debug, trace};
 use crate::util::KeyValueVecKeyPrinter;
 
 const MAXIMUM_REQUEST_BODY_SIZE: usize = 1024 * 1024 * 1024;
+const PROTOCOL_VERSION_HEADER: &str = "vss-protocol-version";
+const PROTOCOL_VERSION: &str = "0.1.0";
 
 #[derive(Clone, Copy)]
 pub(crate) struct VssServiceConfig {
@@ -77,6 +79,17 @@ impl Service<Request<Incoming>> for VssService {
 		let maximum_request_body_size = self.config.maximum_request_body_size;
 
 		Box::pin(async move {
+			if path == "/metrics" {
+				let response = b"# HELP vss_service_up Is the vss service up?\n# TYPE vss_service_up gauge\nvss_service_up 1\n";
+				return Ok(Response::builder()
+					.status(StatusCode::OK)
+					.header("Content-Type", "text/plain; version=0.0.4")
+					.header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.as_bytes())
+					.body(Full::new(Bytes::from_static(response)))
+					// unwrap safety: body only errors when previous chained calls failed.
+					.unwrap());
+			}
+
 			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
@@ -120,13 +133,10 @@ impl Service<Request<Incoming>> for VssService {
 					)
 					.await
 				},
-				_ => {
-					let error_msg = "Invalid request path.".as_bytes();
-					Ok(Response::builder()
-						.status(StatusCode::BAD_REQUEST)
-						.body(Full::new(Bytes::from(error_msg)))
-						.unwrap())
-				},
+				_ => Ok(build_response(
+					StatusCode::BAD_REQUEST,
+					Bytes::from_static(b"Invalid request path."),
+				)),
 			}
 		})
 	}
@@ -218,27 +228,33 @@ async fn handle_request<
 	let bytes = match limited_body.collect().await {
 		Ok(body) => body.to_bytes(),
 		Err(_) => {
-			return Ok(Response::builder()
-				.status(StatusCode::PAYLOAD_TOO_LARGE)
-				.body(Full::new(Bytes::from("Request body too large")))
-				// unwrap safety: body only errors when previous chained calls failed.
-				.unwrap());
+			return Ok(build_response(
+				StatusCode::PAYLOAD_TOO_LARGE,
+				Bytes::from_static(b"Request body too large"),
+			));
 		},
 	};
 	match T::decode(bytes) {
 		Ok(request) => match handler(store.clone(), user_token, request).await {
-			Ok(response) => Ok(Response::builder()
-				.body(Full::new(Bytes::from(response.encode_to_vec())))
-				// unwrap safety: body only errors when previous chained calls failed.
-				.unwrap()),
+			Ok(response) => {
+				Ok(build_response(StatusCode::OK, Bytes::from(response.encode_to_vec())))
+			},
 			Err(e) => Ok(build_error_response(e)),
 		},
-		Err(_) => Ok(Response::builder()
-			.status(StatusCode::BAD_REQUEST)
-			.body(Full::new(Bytes::from(b"Error parsing request".to_vec())))
-			// unwrap safety: body only errors when previous chained calls failed.
-			.unwrap()),
+		Err(_) => Ok(build_response(
+			StatusCode::BAD_REQUEST,
+			Bytes::from_static(b"Error parsing request"),
+		)),
 	}
+}
+
+fn build_response(status_code: StatusCode, body: Bytes) -> Response<Full<Bytes>> {
+	Response::builder()
+		.status(status_code)
+		.header(PROTOCOL_VERSION_HEADER, PROTOCOL_VERSION.as_bytes())
+		.body(Full::new(body))
+		// unwrap safety: body only errors when previous chained calls failed.
+		.unwrap()
 }
 
 fn build_error_response(e: VssError) -> Response<Full<Bytes>> {
@@ -284,9 +300,30 @@ fn build_error_response(e: VssError) -> Response<Full<Bytes>> {
 			(status, error)
 		},
 	};
-	Response::builder()
-		.status(status_code)
-		.body(Full::new(Bytes::from(error_response.encode_to_vec())))
-		// unwrap safety: body only errors when previous chained calls failed.
-		.unwrap()
+	build_response(status_code, Bytes::from(error_response.encode_to_vec()))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn build_response_adds_protocol_version_header() {
+		let response = build_response(StatusCode::OK, Bytes::new());
+
+		assert_eq!(
+			response.headers().get(PROTOCOL_VERSION_HEADER).unwrap().to_str().unwrap(),
+			PROTOCOL_VERSION,
+		);
+	}
+
+	#[test]
+	fn build_error_response_adds_protocol_version_header() {
+		let response = build_error_response(VssError::InvalidRequestError("bad request".into()));
+
+		assert_eq!(
+			response.headers().get(PROTOCOL_VERSION_HEADER).unwrap().to_str().unwrap(),
+			PROTOCOL_VERSION,
+		);
+	}
 }
