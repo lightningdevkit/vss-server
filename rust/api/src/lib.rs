@@ -9,6 +9,10 @@
 #![deny(rustdoc::private_intra_doc_links)]
 #![deny(missing_docs)]
 
+/// The version of the VSS protocol supported by this implementation.
+/// Returned to clients via the `HealthCheck` API for protocol compatibility checks.
+pub const VSS_PROTOCOL_VERSION: i64 = 1;
+
 /// Contains interface for authorizer that is run before every request, and its corresponding implementations.
 pub mod auth;
 /// Implements the error type ([`error::VssError`]) which is eventually converted to [`ErrorResponse`] and returned to the client.

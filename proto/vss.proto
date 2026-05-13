@@ -245,6 +245,22 @@ message ListKeyVersionsResponse {
   optional int64 global_version = 3;
 }
 
+// Request payload to be used for `HealthCheck` API call to server.
+// Clients can call this API to verify that the server is running and to query
+// the version of the VSS protocol supported by the server.
+// This API is unauthenticated.
+message HealthCheckRequest {
+}
+
+// Server response for `HealthCheck` API.
+// A successful HTTP 200 response indicates that the VSS server is operational.
+message HealthCheckResponse {
+
+  // The version of the VSS protocol supported by this server.
+  // Clients can use this to verify protocol compatibility with the server.
+  int64 version = 1;
+}
+
 // When HttpStatusCode is not ok (200), the response `content` contains a serialized `ErrorResponse`
 // with the relevant `ErrorCode` and `message`
 message ErrorResponse {
