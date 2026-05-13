@@ -249,6 +249,23 @@ pub struct ListKeyVersionsResponse {
 	#[prost(int64, optional, tag = "3")]
 	pub global_version: ::core::option::Option<i64>,
 }
+/// Request payload to be used for `HealthCheck` API call to server.
+/// Clients can call this API to verify that the server is running and to query
+/// the version of the VSS protocol supported by the server.
+/// This API is unauthenticated.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HealthCheckRequest {}
+/// Server response for `HealthCheck` API.
+/// A successful HTTP 200 response indicates that the VSS server is operational.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HealthCheckResponse {
+	/// The version of the VSS protocol supported by this server.
+	/// Clients can use this to verify protocol compatibility with the server.
+	#[prost(int64, tag = "1")]
+	pub version: i64,
+}
 /// When HttpStatusCode is not ok (200), the response `content` contains a serialized `ErrorResponse`
 /// with the relevant `ErrorCode` and `message`
 #[allow(clippy::derive_partial_eq_without_eq)]

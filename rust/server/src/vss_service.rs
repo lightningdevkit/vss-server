@@ -11,9 +11,10 @@ use api::error::VssError;
 use api::kv_store::KvStore;
 use api::types::{
 	DeleteObjectRequest, DeleteObjectResponse, ErrorCode, ErrorResponse, GetObjectRequest,
-	GetObjectResponse, ListKeyVersionsRequest, ListKeyVersionsResponse, PutObjectRequest,
-	PutObjectResponse,
+	GetObjectResponse, HealthCheckResponse, ListKeyVersionsRequest, ListKeyVersionsResponse,
+	PutObjectRequest, PutObjectResponse,
 };
+use api::VSS_PROTOCOL_VERSION;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -80,6 +81,13 @@ impl Service<Request<Incoming>> for VssService {
 			let prefix_stripped_path = path.strip_prefix(BASE_PATH_PREFIX).unwrap_or_default();
 
 			match prefix_stripped_path {
+				"/health" => {
+					let response = HealthCheckResponse { version: VSS_PROTOCOL_VERSION };
+					Ok(Response::builder()
+						.status(StatusCode::OK)
+						.body(Full::new(Bytes::from(response.encode_to_vec())))
+						.unwrap())
+				},
 				"/getObject" => {
 					handle_request(
 						store,
