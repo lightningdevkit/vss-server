@@ -137,3 +137,7 @@ development of VSS, you can reach out to us in the [LDK Discord] in the `#vss` c
 [LDK Discord]: https://discord.gg/5AcknnMfBw
 
 [UniFFI]: https://mozilla.github.io/uniffi-rs/
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
