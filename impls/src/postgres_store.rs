@@ -834,7 +834,9 @@ where
 
 #[cfg(test)]
 mod tests {
-	use super::{DUMMY_MIGRATION, MIGRATIONS, decode_page_token, drop_database, encode_page_token};
+	use super::{
+		Client, DUMMY_MIGRATION, MIGRATIONS, decode_page_token, drop_database, encode_page_token,
+	};
 	use crate::postgres_store::PostgresPlaintextBackend;
 	use api::define_kv_store_tests;
 	use api::kv_store::KvStore;
@@ -844,7 +846,7 @@ mod tests {
 
 	use bytes::Bytes;
 	use tokio::sync::OnceCell;
-	use tokio_postgres::NoTls;
+	use tokio_postgres::{NoTls, SimpleQueryMessage};
 
 	const POSTGRES_ENDPOINT: &str = match option_env!("POSTGRES_ENDPOINT") {
 		Some(endpoint) => endpoint,
@@ -1238,6 +1240,56 @@ mod tests {
 		}
 
 		drop_database(POSTGRES_ENDPOINT, DEFAULT_DB, vss_db, NoTls).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn prepared_statements_should_be_reused_within_and_across_transactions() {
+		async fn statement_usage(conn: &Client, stmt: &str) -> (String, u64) {
+			// Inspect the same session without preparing another statement for the inspection.
+			let messages = conn
+				.uncached_client
+				.simple_query(
+					"SELECT name, statement, generic_plans + custom_plans AS uses
+					 FROM pg_prepared_statements",
+				)
+				.await
+				.unwrap();
+			let statements: Vec<_> = messages
+				.into_iter()
+				.filter_map(|message| match message {
+					SimpleQueryMessage::Row(row) if row.get("statement") == Some(stmt) => Some((
+						row.get("name").unwrap().to_owned(),
+						row.get("uses").unwrap().parse::<u64>().unwrap(),
+					)),
+					_ => None,
+				})
+				.collect();
+			assert_eq!(statements.len(), 1, "expected one prepared statement: {statements:?}");
+			statements.into_iter().next().unwrap()
+		}
+
+		let mut conn = Client::connect(POSTGRES_ENDPOINT, DEFAULT_DB, NoTls).await.unwrap();
+		let stmt = "SELECT $1::BIGINT";
+
+		let mut transaction = conn.transaction().await.unwrap();
+		assert_eq!(transaction.execute(stmt, &[&1_i64]).await.unwrap(), 1);
+		assert_eq!(transaction.execute(stmt, &[&2_i64]).await.unwrap(), 1);
+		transaction.commit().await.unwrap();
+		let (name, uses) = statement_usage(&conn, stmt).await;
+		assert_eq!(uses, 2, "statement should be reused within a transaction");
+
+		let mut transaction = conn.transaction().await.unwrap();
+		assert_eq!(transaction.execute(stmt, &[&3_i64]).await.unwrap(), 1);
+		transaction.commit().await.unwrap();
+		assert_eq!(statement_usage(&conn, stmt).await, (name.clone(), 3));
+
+		let rows = conn.query(stmt, &[&4_i64]).await.unwrap();
+		assert_eq!(rows[0].get::<_, i64>(0), 4);
+		assert_eq!(statement_usage(&conn, stmt).await, (name.clone(), 4));
+
+		let row = conn.query_opt(stmt, &[&5_i64]).await.unwrap().unwrap();
+		assert_eq!(row.get::<_, i64>(0), 5);
+		assert_eq!(statement_usage(&conn, stmt).await, (name, 5));
 	}
 
 	#[test]
