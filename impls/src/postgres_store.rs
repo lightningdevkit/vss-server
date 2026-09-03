@@ -755,7 +755,10 @@ mod tests {
 	use tokio::sync::OnceCell;
 	use tokio_postgres::NoTls;
 
-	const POSTGRES_ENDPOINT: &str = "postgresql://postgres:postgres@localhost:5432";
+	const POSTGRES_ENDPOINT: &str = match option_env!("POSTGRES_ENDPOINT") {
+		Some(endpoint) => endpoint,
+		None => "postgresql://postgres:postgres@localhost:5432",
+	};
 	const DEFAULT_DB: &str = "postgres";
 	const MIGRATIONS_START: usize = 0;
 	const MIGRATIONS_END: usize = MIGRATIONS.len();
