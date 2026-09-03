@@ -390,18 +390,19 @@ where
 	async fn execute_non_conditional_upsert(
 		&self, transaction: &Transaction<'_>, vss_record: &VssDbRecord,
 	) -> io::Result<u64> {
-		let stmt = format!("INSERT INTO vss_db (user_token, store_id, key, value, version, created_at, last_updated_at)
-                    VALUES ($1, $2, $3, $4, {}, $5, $6)
+		const STMT: &str = "INSERT INTO vss_db (user_token, store_id, key, value, version, created_at, last_updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (user_token, store_id, key) DO UPDATE
-                    SET value = EXCLUDED.value, version = {}, last_updated_at = EXCLUDED.last_updated_at", INITIAL_RECORD_VERSION, INITIAL_RECORD_VERSION);
+                    SET value = EXCLUDED.value, version = EXCLUDED.version, last_updated_at = EXCLUDED.last_updated_at";
 		let num_rows = transaction
 			.execute(
-				&stmt,
+				STMT,
 				&[
 					&vss_record.user_token,
 					&vss_record.store_id,
 					&vss_record.key,
 					&vss_record.value,
+					&i64::from(INITIAL_RECORD_VERSION),
 					&vss_record.created_at,
 					&vss_record.last_updated_at,
 				],
@@ -416,17 +417,18 @@ where
 	async fn execute_conditional_insert(
 		&self, transaction: &Transaction<'_>, vss_record: &VssDbRecord,
 	) -> io::Result<u64> {
-		let stmt = format!("INSERT INTO vss_db (user_token, store_id, key, value, version, created_at, last_updated_at)
-                    VALUES ($1, $2, $3, $4, {}, $5, $6)
-                    ON CONFLICT DO NOTHING", INITIAL_RECORD_VERSION);
+		const STMT: &str = "INSERT INTO vss_db (user_token, store_id, key, value, version, created_at, last_updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT DO NOTHING";
 		let num_rows = transaction
 			.execute(
-				&stmt,
+				STMT,
 				&[
 					&vss_record.user_token,
 					&vss_record.store_id,
 					&vss_record.key,
 					&vss_record.value,
+					&i64::from(INITIAL_RECORD_VERSION),
 					&vss_record.created_at,
 					&vss_record.last_updated_at,
 				],
