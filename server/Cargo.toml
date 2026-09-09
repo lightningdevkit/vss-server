@@ -10,9 +10,10 @@ homepage.workspace = true
 repository.workspace = true
 
 [features]
+default = [ "jwt", "sigs", "postgres-native-tls" ]
 jwt = ["auth-impls/jwt"]
 sigs = ["auth-impls/sigs"]
-default = [ "jwt", "sigs" ]
+postgres-native-tls = ["impls/postgres-native-tls"]
 
 [dependencies]
 api = { workspace = true }

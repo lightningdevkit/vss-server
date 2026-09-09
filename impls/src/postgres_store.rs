@@ -9,8 +9,6 @@ use api::types::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::Utc;
-use native_tls::TlsConnector;
-use postgres_native_tls::MakeTlsConnector;
 use std::cmp::min;
 use std::io::{self, Error, ErrorKind};
 use tokio::sync::Mutex;
@@ -19,6 +17,7 @@ use tokio_postgres::{Client, NoTls, Socket, Transaction, error};
 
 use log::{debug, info, warn};
 
+#[cfg(feature = "postgres-native-tls")]
 pub use native_tls::Certificate;
 
 pub(crate) struct VssDbRecord {
@@ -146,7 +145,8 @@ where
 pub type PostgresPlaintextBackend = PostgresBackend<NoTls>;
 
 /// A postgres backend with TLS connections to the database
-pub type PostgresTlsBackend = PostgresBackend<MakeTlsConnector>;
+#[cfg(feature = "postgres-native-tls")]
+pub type PostgresTlsBackend = PostgresBackend<postgres_native_tls::MakeTlsConnector>;
 
 async fn make_db_connection<T>(
 	postgres_endpoint: &str, db_name: &str, tls: T,
@@ -228,12 +228,13 @@ impl PostgresPlaintextBackend {
 	}
 }
 
+#[cfg(feature = "postgres-native-tls")]
 impl PostgresTlsBackend {
 	/// Constructs a [`PostgresTlsBackend`] using `postgres_endpoint` for PostgreSQL connection information.
 	pub async fn new(
 		postgres_endpoint: &str, default_db: &str, vss_db: &str, crt_pem: Option<&str>,
 	) -> Result<Self, Error> {
-		let mut builder = TlsConnector::builder();
+		let mut builder = native_tls::TlsConnector::builder();
 		if let Some(pem) = crt_pem {
 			let crt = Certificate::from_pem(pem.as_bytes()).map_err(|e| {
 				Error::new(
@@ -250,7 +251,7 @@ impl PostgresTlsBackend {
 			postgres_endpoint,
 			default_db,
 			vss_db,
-			MakeTlsConnector::new(connector),
+			postgres_native_tls::MakeTlsConnector::new(connector),
 		)
 		.await
 	}
