@@ -10,16 +10,16 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-async-trait = "0.1.77"
+async-trait = "0.1.13"
 api = { workspace = true }
-chrono = "0.4.38"
-tokio-postgres = { version = "0.7.12", features = ["with-chrono-0_4"] }
-bytes = "1.4.0"
-tokio = { version = "1.38.0", default-features = false, features = ["rt", "macros"] }
-native-tls = { version = "0.2.14", default-features = false }
-postgres-native-tls = { version = "0.5.2", default-features = false, features = ["runtime"] }
-log = { version = "0.4.29", default-features = false }
+chrono = "0.4.16"
+tokio-postgres = { version = "0.7.15", features = ["with-chrono-0_4"] }
+bytes = "1"
+tokio = { version = "1.30", default-features = false, features = ["rt", "macros"] }
+native-tls = { version = "0.2.4", default-features = false }
+postgres-native-tls = { version = "0.5", default-features = false, features = ["runtime"] }
+log = { version = "0.4.8", default-features = false }
 
 [dev-dependencies]
-tokio = { version = "1.38.0", default-features = false, features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.30", default-features = false, features = ["rt-multi-thread", "macros"] }
 api = { workspace = true, features = ["_test_utils"] }
