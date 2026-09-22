@@ -1,5 +1,5 @@
 use crate::error::VssError;
-use crate::kv_store::{KvStore, GLOBAL_VERSION_KEY};
+use crate::kv_store::{GLOBAL_VERSION_KEY, KvStore};
 use crate::types::{
 	DeleteObjectRequest, GetObjectRequest, KeyValue, ListKeyVersionsRequest,
 	ListKeyVersionsResponse, PutObjectRequest,
@@ -7,7 +7,7 @@ use crate::types::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 
 /// Defines KvStoreTestSuite which is required for an implementation to be VSS protocol compliant.
 #[macro_export]
@@ -150,8 +150,8 @@ pub trait KvStoreTestSuite {
 		Ok(())
 	}
 
-	async fn put_multi_object_should_fail_when_single_key_version_mismatched(
-	) -> Result<(), VssError> {
+	async fn put_multi_object_should_fail_when_single_key_version_mismatched()
+	-> Result<(), VssError> {
 		let kv_store = Self::create_store().await;
 		let ctx = TestContext::new(&kv_store);
 
@@ -467,8 +467,8 @@ pub trait KvStoreTestSuite {
 		Ok(())
 	}
 
-	async fn list_should_return_zero_global_version_when_global_versioning_not_enabled(
-	) -> Result<(), VssError> {
+	async fn list_should_return_zero_global_version_when_global_versioning_not_enabled()
+	-> Result<(), VssError> {
 		let kv_store = Self::create_store().await;
 		let ctx = TestContext::new(&kv_store);
 

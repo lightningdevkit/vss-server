@@ -190,10 +190,7 @@ async fn handle_list_object_request(
 	let request_id: u64 = rand::random();
 	trace!(
 		"Handling ListKeyVersionsRequest {} for key_prefix {:?}, page_size {:?}, page_token {:?}",
-		request_id,
-		request.key_prefix,
-		request.page_size,
-		request.page_token
+		request_id, request.key_prefix, request.page_size, request.page_token
 	);
 	let result = store.list_key_versions(user_token, request).await;
 	if let Err(ref e) = result {

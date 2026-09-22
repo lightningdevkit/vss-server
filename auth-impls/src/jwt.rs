@@ -5,8 +5,8 @@
 use api::auth::{AuthResponse, Authorizer};
 use api::error::VssError;
 use async_trait::async_trait;
-use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use openssl::hash::MessageDigest;
 use openssl::pkey::Public;
 use openssl::pkey::{Id, PKey};
@@ -87,7 +87,7 @@ impl JWTAuthorizer {
 				_ => {
 					return Err(VssError::AuthError(String::from(
 						"Token does not have three parts",
-					)))
+					)));
 				},
 			};
 
@@ -241,7 +241,7 @@ mod tests {
 		-----END PRIVATE KEY-----";
 
 	fn create_token<T: Serialize>(encoding_key: &str, claims: T) -> String {
-		use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+		use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 		let valid_encoding_key = EncodingKey::from_rsa_pem(encoding_key.as_bytes())
 			.expect("Failed to create Encoding Key.");
 		encode(&Header::new(Algorithm::RS256), &claims, &valid_encoding_key).unwrap()
@@ -280,7 +280,7 @@ mod tests {
 	}
 
 	fn jsonwebtoken_decode<T: DeserializeOwned>(token: &str, rsa_pem: &str) -> Result<T, VssError> {
-		use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+		use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 		let jwt_issuer_key = DecodingKey::from_rsa_pem(rsa_pem.as_bytes()).unwrap();
 		let claims = decode::<T>(token, &jwt_issuer_key, &Validation::new(Algorithm::RS256))
 			.map_err(|e| VssError::AuthError(format!("Authentication failure. {}", e)))?

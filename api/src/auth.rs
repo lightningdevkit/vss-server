@@ -16,7 +16,7 @@ pub trait Authorizer: Send + Sync {
 	/// Returns [`AuthResponse`] for an authenticated and authorized user or [`VssError::AuthError`]
 	/// for an unauthorized request.
 	async fn verify(&self, headers_map: &HashMap<String, String>)
-		-> Result<AuthResponse, VssError>;
+	-> Result<AuthResponse, VssError>;
 }
 
 /// A no-operation authorizer, which lets any user-request go through.

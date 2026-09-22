@@ -89,7 +89,7 @@ impl Authorizer for SignatureValidatingAuthorizer {
 
 #[cfg(test)]
 mod tests {
-	use crate::signature::{SignatureValidatingAuthorizer, SIGNING_CONSTANT};
+	use crate::signature::{SIGNING_CONSTANT, SignatureValidatingAuthorizer};
 	use api::auth::Authorizer;
 	use api::error::VssError;
 	use secp256k1::{Message, PublicKey, SecretKey};
