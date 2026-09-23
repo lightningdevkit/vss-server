@@ -1,7 +1,7 @@
 use crate::migrations::*;
 
 use api::error::VssError;
-use api::kv_store::{KvStore, GLOBAL_VERSION_KEY, INITIAL_RECORD_VERSION};
+use api::kv_store::{GLOBAL_VERSION_KEY, INITIAL_RECORD_VERSION, KvStore};
 use api::types::{
 	DeleteObjectRequest, DeleteObjectResponse, GetObjectRequest, GetObjectResponse, KeyValue,
 	ListKeyVersionsRequest, ListKeyVersionsResponse, PutObjectRequest, PutObjectResponse,
@@ -15,7 +15,7 @@ use std::cmp::min;
 use std::io::{self, Error, ErrorKind};
 use tokio::sync::Mutex;
 use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-use tokio_postgres::{error, Client, NoTls, Socket, Transaction};
+use tokio_postgres::{Client, NoTls, Socket, Transaction, error};
 
 use log::{debug, info, warn};
 
@@ -693,7 +693,7 @@ where
 
 		let key_like = format!("{}%", key_prefix.as_deref().unwrap_or_default());
 
-		let rows = if let Some(ref token) = page_token {
+		let rows = if let Some(token) = page_token {
 			let page_sort_order = decode_page_token(token)?;
 			let stmt = "SELECT key, version, sort_order FROM vss_db WHERE user_token = $1 AND store_id = $2 AND sort_order < $3 AND key LIKE $4 AND key != $5 ORDER BY sort_order DESC LIMIT $6";
 			let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![
@@ -743,7 +743,7 @@ where
 
 #[cfg(test)]
 mod tests {
-	use super::{decode_page_token, drop_database, encode_page_token, DUMMY_MIGRATION, MIGRATIONS};
+	use super::{DUMMY_MIGRATION, MIGRATIONS, decode_page_token, drop_database, encode_page_token};
 	use crate::postgres_store::PostgresPlaintextBackend;
 	use api::define_kv_store_tests;
 	use api::kv_store::KvStore;

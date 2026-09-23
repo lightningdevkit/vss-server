@@ -1,12 +1,12 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["server", "api", "impls", "auth-impls"]
 default-members = ["server"]
 
 [workspace.package]
 version = "0.1.0-alpha.0"
 rust-version = "1.85.0"
-edition = "2021"
+edition = "2024"
 authors = ["Leo Nash <hello@leonash.net>", "Elias Rohrer <dev@tnull.de>"]
 license = "MIT OR Apache-2.0"
 homepage = "https://lightningdevkit.org/"

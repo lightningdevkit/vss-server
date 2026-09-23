@@ -51,8 +51,11 @@ jobs:
           cd vss-server
           RUSTFLAGS="--cfg noop_authorizer" cargo build --no-default-features
           ./target/debug/vss-server server/vss-server-config.toml&
-      - name: Pin packages to allow for MSRV
+      - name: Pin ldk-node packages to allow for MSRV
         if: "matrix.toolchain == '1.85.0'"
+        env:
+          # Use MSRV-aware resolver for ldk-node
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
         run: |
           cd ldk-node
           cargo update -p idna_adapter --precise "1.2.0" --verbose # idna_adapter 1.2.1 uses ICU4X 2.2.0, requiring 1.86 and newer
