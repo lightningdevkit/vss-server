@@ -51,6 +51,7 @@ macro_rules! define_kv_store_tests {
 		create_test!(get_should_return_correct_value_when_key_exists);
 		create_test!(list_should_return_paginated_response);
 		create_test!(list_should_honour_page_size_and_key_prefix_if_provided);
+		create_test!(list_should_treat_key_prefix_as_a_literal_string);
 		create_test!(list_should_return_zero_global_version_when_global_versioning_not_enabled);
 		create_test!(list_should_limit_max_page_size);
 		create_test!(list_should_return_results_ordered_by_creation_time);
@@ -463,6 +464,51 @@ pub trait KvStoreTestSuite {
 				.map(|s| s.to_string())
 				.collect();
 		assert_eq!(unique_keys, expected_keys);
+
+		Ok(())
+	}
+
+	async fn list_should_treat_key_prefix_as_a_literal_string() -> Result<(), VssError> {
+		let kv_store = Self::create_store().await;
+		let ctx = TestContext::new(&kv_store);
+
+		let stored_keys = [
+			"percent%older",
+			"percent-false-match",
+			"percent%newer",
+			"underscore_older",
+			"underscoreXfalse-match",
+			"underscore_newer",
+			"backslash\\older",
+			"backslash%",
+			"backslash\\newer",
+		];
+		ctx.put_objects(Some(0), stored_keys.into_iter().map(|key| kv(key, "v1", 0)).collect())
+			.await?;
+
+		async fn assert_list_eq(ctx: &TestContext<'_>, prefix: &str, expected: &[&str]) {
+			for page_size in [100, 1] {
+				let mut page_token = None;
+				let mut actual = Vec::new();
+				loop {
+					let resp = ctx
+						.list(page_token, Some(page_size), Some(prefix.to_owned()))
+						.await
+						.unwrap();
+					assert!(resp.key_versions.len() <= page_size as usize);
+					actual.extend(resp.key_versions.into_iter().map(|key_version| key_version.key));
+					page_token = resp.next_page_token.filter(|token| !token.is_empty());
+					if page_token.is_none() {
+						break;
+					}
+				}
+				assert_eq!(actual, expected, "prefix='{prefix}', page_size={page_size}");
+			}
+		}
+
+		assert_list_eq(&ctx, "percent%", &["percent%newer", "percent%older"]).await;
+		assert_list_eq(&ctx, "underscore_", &["underscore_newer", "underscore_older"]).await;
+		assert_list_eq(&ctx, "backslash\\", &["backslash\\newer", "backslash\\older"]).await;
 
 		Ok(())
 	}
