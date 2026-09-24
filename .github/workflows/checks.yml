@@ -1,0 +1,31 @@
+name: Continuous Integration Checks
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TOOLCHAIN: 1.85.0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Install Rust ${{ env.TOOLCHAIN }} toolchain
+        run: |
+          rustup toolchain install ${{ env.TOOLCHAIN }} --profile minimal
+          rustup default ${{ env.TOOLCHAIN }}
+          rustup component add rustfmt
+      - name: Run rustfmt checks
+        run: cargo fmt --check
