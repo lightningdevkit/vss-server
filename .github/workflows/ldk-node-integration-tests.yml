@@ -33,11 +33,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           path: vss-server
       - name: Checkout LDK Node
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           repository: lightningdevkit/ldk-node
           path: ldk-node
