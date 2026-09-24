@@ -29,3 +29,33 @@ jobs:
           rustup component add rustfmt
       - name: Run rustfmt checks
         run: cargo fmt --check
+
+  minimal-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [ stable, 1.85.0 ] # 1.85.0 is the MSRV
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Install Rust ${{ matrix.toolchain }} toolchain
+        run: |
+          rustup toolchain install ${{ matrix.toolchain }} --profile minimal
+          rustup default ${{ matrix.toolchain }}
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+      - uses: Swatinem/rust-cache@v2
+      - name: "check -Z direct-minimal-versions"
+        run: |
+          # Remove dev-deps from all Cargo.toml's to prevent `cargo update` from
+          # determining minimal versions based on dev-deps.
+          cargo hack --remove-dev-deps --workspace
+
+          # Resolve direct dependencies using the min. version specified in our
+          # Cargo.toml's.
+          RUSTC_BOOTSTRAP=1 cargo update -Z direct-minimal-versions
+
+          cargo check --workspace
+          cargo check --workspace --no-default-features
