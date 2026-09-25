@@ -10,13 +10,13 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-async-trait = "0.1.77"
-prost = { version = "0.11.6", default-features = false, features = ["std", "prost-derive"] }
-bytes = "1.4.0"
-rand = { version = "0.8.5", optional = true}
+async-trait = "0.1.13"
+prost = { version = "0.11", default-features = false, features = ["std", "prost-derive"] }
+bytes = "1"
+rand = { version = "0.8", optional = true}
 
 [target.'cfg(genproto)'.build-dependencies]
-prost-build = { version = "0.11.3" }
+prost-build = { version = "0.11" }
 
 [dev-dependencies]
 

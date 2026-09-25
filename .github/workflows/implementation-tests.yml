@@ -6,6 +6,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   postgres-backend-tests:
     strategy:
@@ -33,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           path: vss-server
       - name: Install Rust toolchain
@@ -45,3 +52,4 @@ jobs:
         run: |
           cd vss-server/impls
           cargo test -- --test-threads=1
+          cargo test --no-default-features -- --test-threads=1
