@@ -7,7 +7,22 @@ the threat model and auth overview, see the root [README](../README.md).
 
 - Rust and Cargo, using at least the repository MSRV of 1.85.0.
 - PostgreSQL 15 or newer.
-- OpenSSL development/runtime libraries for PostgreSQL TLS support.
+- **(Optional)** OpenSSL development/runtime libraries for JWT authentication and PostgreSQL TLS
+  support. These features are enabled by default.
+
+## Optional Features
+
+The following optional cargo features are available, all enabled by default:
+
+- `jwt`: Enables JWT authentication
+- `sigs`: Enables Signature authentication
+- `postgres-native-tls`: Enables connecting to PostgreSQL via TLS
+
+For example, to build without OpenSSL enable only the `sigs` feature:
+
+```bash
+cargo build --release --no-default-features --features sigs
+```
 
 ## Quick Start with Docker PostgreSQL
 

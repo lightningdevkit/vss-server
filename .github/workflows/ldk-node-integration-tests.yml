@@ -6,6 +6,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   ldk-node-integration-tests:
     strategy:
@@ -33,11 +40,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           path: vss-server
       - name: Checkout LDK Node
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
         with:
           repository: lightningdevkit/ldk-node
           path: ldk-node

@@ -15,7 +15,7 @@ repository = "https://github.com/lightningdevkit/vss-server/"
 [workspace.dependencies]
 api = { package = "vss-api", version = "0.1.0-alpha.0", path = "./api" }
 auth-impls = { package = "vss-auth-impls", version = "0.1.0-alpha.0", path = "./auth-impls" }
-impls = { package = "vss-impls", version = "0.1.0-alpha.0", path = "./impls" }
+impls = { package = "vss-impls", version = "0.1.0-alpha.0", path = "./impls", default-features = false }
 
 [profile.release]
 panic = "abort"

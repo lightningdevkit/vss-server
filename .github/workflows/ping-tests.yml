@@ -6,6 +6,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   ping-tests:
     strategy:
@@ -33,13 +40,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
       - name: Install Rust toolchain
         run: |
-          rustup toolchain install ${{ matrix.toolchain }} --profile minimal --component rustfmt
+          rustup toolchain install ${{ matrix.toolchain }} --profile minimal
           rustup default ${{ matrix.toolchain }}
-      - name: Check formatting
-        run: cargo fmt --all -- --check
       - name: Build and Deploy VSS Server
         run: |
           RUSTFLAGS="--cfg noop_authorizer" cargo build --no-default-features

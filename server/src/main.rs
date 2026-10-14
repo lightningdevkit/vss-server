@@ -27,7 +27,9 @@ use api::kv_store::KvStore;
 use auth_impls::jwt::JWTAuthorizer;
 #[cfg(feature = "sigs")]
 use auth_impls::signature::SignatureValidatingAuthorizer;
-use impls::postgres_store::{PostgresPlaintextBackend, PostgresTlsBackend};
+use impls::postgres_store::PostgresPlaintextBackend;
+#[cfg(feature = "postgres-native-tls")]
+use impls::postgres_store::PostgresTlsBackend;
 use util::logger::ServerLogger;
 use vss_service::{VssService, VssServiceConfig};
 
@@ -128,33 +130,42 @@ fn main() {
 			std::process::exit(-1);
 		});
 
-		let store: Arc<dyn KvStore> = if let Some(crt_pem) = config.tls_config {
-			let postgres_tls_backend = PostgresTlsBackend::new(
-				&config.postgresql_prefix,
-				&config.default_db,
-				&config.vss_db,
-				crt_pem.as_deref(),
-			)
-			.await
-			.unwrap_or_else(|e| {
-				error!("Failed to start postgres TLS backend: {}", e);
+		let store: Arc<dyn KvStore> = match config.tls_config {
+			#[cfg(feature = "postgres-native-tls")]
+			Some(crt_pem) => {
+				let postgres_tls_backend = PostgresTlsBackend::new(
+					&config.postgresql_prefix,
+					&config.default_db,
+					&config.vss_db,
+					crt_pem.as_deref(),
+				)
+				.await
+				.unwrap_or_else(|e| {
+					error!("Failed to start postgres TLS backend: {}", e);
+					std::process::exit(-1);
+				});
+				info!("Connected to PostgreSQL TLS backend, database {}", config.vss_db);
+				Arc::new(postgres_tls_backend)
+			},
+			#[cfg(not(feature = "postgres-native-tls"))]
+			Some(_) => {
+				error!("PostgreSQL TLS configuration requires the `postgres-native-tls` feature");
 				std::process::exit(-1);
-			});
-			info!("Connected to PostgreSQL TLS backend, database {}", config.vss_db);
-			Arc::new(postgres_tls_backend)
-		} else {
-			let postgres_plaintext_backend = PostgresPlaintextBackend::new(
-				&config.postgresql_prefix,
-				&config.default_db,
-				&config.vss_db,
-			)
-			.await
-			.unwrap_or_else(|e| {
-				error!("Failed to start postgres plaintext backend: {}", e);
-				std::process::exit(-1);
-			});
-			info!("Connected to PostgreSQL plaintext backend, database {}", config.vss_db);
-			Arc::new(postgres_plaintext_backend)
+			},
+			None => {
+				let postgres_plaintext_backend = PostgresPlaintextBackend::new(
+					&config.postgresql_prefix,
+					&config.default_db,
+					&config.vss_db,
+				)
+				.await
+				.unwrap_or_else(|e| {
+					error!("Failed to start postgres plaintext backend: {}", e);
+					std::process::exit(-1);
+				});
+				info!("Connected to PostgreSQL plaintext backend, database {}", config.vss_db);
+				Arc::new(postgres_plaintext_backend)
+			},
 		};
 
 		let rest_svc_listener = TcpListener::bind(&config.bind_address).await.unwrap_or_else(|e| {
