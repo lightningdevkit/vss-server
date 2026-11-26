@@ -67,6 +67,22 @@ impl VssService {
 
 pub(crate) const BASE_PATH_PREFIX: &str = "/vss";
 
+/// Collapses runs of `/` in `path` into a single `/`, and drops one trailing `/`.
+fn normalize_path(path: &str) -> String {
+	let mut normalized = String::with_capacity(path.len());
+	for c in path.chars() {
+		if c == '/' && normalized.ends_with('/') {
+			continue;
+		}
+		normalized.push(c);
+	}
+
+	if normalized.len() > 1 && normalized.ends_with('/') {
+		normalized.pop();
+	}
+	normalized
+}
+
 impl Service<Request<Incoming>> for VssService {
 	type Response = Response<Full<Bytes>>;
 	type Error = hyper::Error;
@@ -75,7 +91,7 @@ impl Service<Request<Incoming>> for VssService {
 	fn call(&self, req: Request<Incoming>) -> Self::Future {
 		let store = Arc::clone(&self.store);
 		let authorizer = Arc::clone(&self.authorizer);
-		let path = req.uri().path().to_owned();
+		let path = normalize_path(req.uri().path());
 		let maximum_request_body_size = self.config.maximum_request_body_size;
 
 		Box::pin(async move {
@@ -322,5 +338,67 @@ mod tests {
 			response.headers().get(PROTOCOL_VERSION_HEADER).unwrap().to_str().unwrap(),
 			PROTOCOL_VERSION,
 		);
+	}
+
+	#[test]
+	fn normalize_path_collapses_repeated_slashes_and_drops_trailing_slash() {
+		let cases = [
+			// Already canonical: must come out untouched.
+			("/vss/getObject", "/vss/getObject"),
+			("/vss/putObjects", "/vss/putObjects"),
+			("/vss/deleteObject", "/vss/deleteObject"),
+			("/vss/listKeyVersions", "/vss/listKeyVersions"),
+			// A base URL ending in `/` puts a doubled slash after the prefix.
+			("/vss//getObject", "/vss/getObject"),
+			("/vss//putObjects", "/vss/putObjects"),
+			("/vss//deleteObject", "/vss/deleteObject"),
+			("/vss//listKeyVersions", "/vss/listKeyVersions"),
+			// Longer runs, trailing slashes, and both together.
+			("/vss///getObject", "/vss/getObject"),
+			("/vss/getObject/", "/vss/getObject"),
+			("/vss//getObject//", "/vss/getObject"),
+			("//vss/getObject", "/vss/getObject"),
+			// Collapsing applies anywhere in the path, but a `.`/`..` segment is left alone
+			("//vss/../../metrics", "/vss/../../metrics"),
+			// `/metrics` is dispatched before the authorizer runs, so it has to tolerate the same variants.
+			("/metrics", "/metrics"),
+			("//metrics", "/metrics"),
+			("/metrics/", "/metrics"),
+			("///metrics//", "/metrics"),
+			// The bare prefix collapses to "/vss", which is not an endpoint and must still 400.
+			("/vss", "/vss"),
+			("/vss/", "/vss"),
+			("/vss//", "/vss"),
+			// Trimming must not turn the root into the empty string, and the empty path stays empty rather than gaining a slash.
+			("/", "/"),
+			("//", "/"),
+			("///", "/"),
+			("", ""),
+			// Asterisk-form (`OPTIONS *`) is not a slash variant of anything.
+			("*", "*"),
+			// Collapsing applies anywhere, but a path that merely shares a character prefix with `/vss` is left alone.
+			("/vssx/getObject", "/vssx/getObject"),
+			("/vssx//getObject", "/vssx/getObject"),
+		];
+
+		for (input, expected) in cases {
+			assert_eq!(normalize_path(input), expected, "input {input:?}");
+		}
+	}
+
+	#[test]
+	fn normalize_path_does_not_resolve_dot_segments_or_percent_decode() {
+		let cases = [
+			("/vss/../metrics", "/vss/../metrics"),
+			("/vss/./getObject", "/vss/./getObject"),
+			// Percent-encoded separators and dot segments stay encoded, so they keep failing to match rather than being decoded into a valid route.
+			("/vss/%2FgetObject", "/vss/%2FgetObject"),
+			("/vss/%2e%2e/metrics", "/vss/%2e%2e/metrics"),
+			("/vss/getObject%2F", "/vss/getObject%2F"),
+		];
+
+		for (input, expected) in cases {
+			assert_eq!(normalize_path(input), expected, "input {input:?}");
+		}
 	}
 }
