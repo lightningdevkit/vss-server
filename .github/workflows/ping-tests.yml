@@ -63,3 +63,13 @@ jobs:
           # Get request with store='storeId' and key=k1
           hex=0A0773746F7265496412026B31
           curl -f --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/getObject
+
+          # A base URL ending in `/` yields a doubled slash after the prefix; this must still
+          # route to the endpoint rather than 400.
+          curl -f --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss//getObject
+
+          # A trailing slash on the endpoint must be tolerated as well.
+          curl -f --data-binary "$(echo "$hex" | xxd -r -p)" http://localhost:8080/vss/getObject/
+
+          # Tolerating slashes must not turn every path into a match: an unknown path still 400s.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/vss/nope)" = 400
