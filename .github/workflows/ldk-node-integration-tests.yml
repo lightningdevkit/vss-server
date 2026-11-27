@@ -66,6 +66,16 @@ jobs:
         run: |
           cd ldk-node
           cargo update -p idna_adapter --precise "1.2.0" --verbose # idna_adapter 1.2.1 uses ICU4X 2.2.0, requiring 1.86 and newer
+      - name: Download bitcoind/electrs test binaries
+        run: |
+          # `integration_tests_vss` requires `BITCOIND_EXE`/`ELECTRS_EXE` to be set. ldk-node's
+          # script downloads them into a temp dir that it deletes on exit, so copy them out first.
+          source ./ldk-node/scripts/download_bitcoind_electrs.sh
+          mkdir -p bin
+          mv "$BITCOIND_EXE" bin/bitcoind
+          mv "$ELECTRS_EXE" bin/electrs
+          echo "BITCOIND_EXE=$(pwd)/bin/bitcoind" >> "$GITHUB_ENV"
+          echo "ELECTRS_EXE=$(pwd)/bin/electrs" >> "$GITHUB_ENV"
       - name: Run LDK Node Integration tests
         run: |
           cd ldk-node
